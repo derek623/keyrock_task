@@ -7,17 +7,17 @@ use serde_json::Value;
 
 pub struct Binance {
     address: String,
+    currency: String
 }
 
 impl Binance {
-    pub fn new(address: &str) -> impl MarketDataSource {
-        Binance { address: address.to_string()}
+    pub fn new(address: &str, currency: &str) -> impl MarketDataSource {
+        Binance { address: address.to_string(), currency: currency.to_string() }
     }
 }
 
 #[async_trait]
 impl MarketDataSource for Binance {
-    //fn normalize(&self, msg: &str) -> OrderBookSnap<10> {
     fn normalize(&self, msg: &str) -> Result<OrderBookSnap<10>, ()>{
         
         let json_msg: Value = serde_json::from_str(msg).unwrap();
@@ -29,11 +29,11 @@ impl MarketDataSource for Binance {
         let mut orderbook: OrderBookSnap<{Binance::MAX_DEPTH}> = OrderBookSnap::new();
 
         for index in 0..Binance::MAX_DEPTH {
-            orderbook.addBid(Level{
+            orderbook.add_bid(Level{
                 exchange: exchange.to_string(), 
                 price: bids[index][0].as_str().unwrap().parse::<f32>().unwrap(), 
                 amount: bids[index][1].as_str().unwrap().parse::<f32>().unwrap()});
-            orderbook.addAsk(Level{
+            orderbook.add_ask(Level{
                 exchange: exchange.to_string(), 
                 price: asks[index][0].as_str().unwrap().parse::<f32>().unwrap(), 
                 amount: asks[index][1].as_str().unwrap().parse::<f32>().unwrap()});
@@ -46,7 +46,8 @@ impl MarketDataSource for Binance {
 
     async fn run(&self) {
 
-        let url = url::Url::parse(&self.address).unwrap();
+        let final_address = format!("{}{}@depth{}@100ms", self.address, self.currency, Binance::MAX_DEPTH.to_string());
+        let url = url::Url::parse(&final_address).unwrap();
         
     
         let (ws_stream, _response) = connect_async(url).await.expect("Failed to connect");
@@ -58,7 +59,7 @@ impl MarketDataSource for Binance {
              let data = message.unwrap().into_text().unwrap();
              match self.normalize(&data) {
                 Ok(orderbook) => {},
-                Err(_) => { println!("Cannot process msg for binance") },
+                Err(_) => { println!("Failed to normalize msg for binance") },
              }
             
         });

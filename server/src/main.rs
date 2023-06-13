@@ -11,12 +11,12 @@ use marketdatasource::MarketDataSource;
 #[tokio::main]
 pub async fn main() -> Result<()> {
 
-    let bitstamp = Bitstamp::new("wss://ws.bitstamp.net");
+    let mut bitstamp = Bitstamp::new("wss://ws.bitstamp.net", "ethbtc");
     let bitstamp_stream = tokio::spawn( async move {
         bitstamp.run().await;
     });
 
-    let binance = Binance::new("wss://stream.binance.com:9443/ws/ethbtc@depth10@100ms");
+    let mut binance = Binance::new("wss://stream.binance.com:9443/ws/", "ethbtc"); //ethbtc@depth10@100ms
     let binance_stream = tokio::spawn( async move {
         binance.run().await;
     });

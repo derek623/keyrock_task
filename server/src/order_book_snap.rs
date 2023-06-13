@@ -17,11 +17,11 @@ impl<const DEPTH: usize> OrderBookSnap<DEPTH> {
         let asks = Vec::with_capacity(DEPTH);
         OrderBookSnap{ bids, asks}
     }
-    pub fn addBid(&mut self, level: Level)
+    pub fn add_bid(&mut self, level: Level)
     {
         self.bids.push(level);
     }
-    pub fn addAsk(&mut self, level: Level)
+    pub fn add_ask(&mut self, level: Level)
     {
         self.asks.push(level);
     }
