@@ -20,7 +20,10 @@ impl Bitstamp {
 impl MarketDataSource for Bitstamp {
     //fn normalize(&self, msg: &str) -> OrderBookSnap<10> {
     fn normalize(&self, msg: &str) -> Result<OrderBookSnap<10>, ()> {
-        let json_msg: Value = serde_json::from_str(msg).unwrap();
+        let json_msg: Value = match serde_json::from_str(msg) {
+            Ok(msg) => msg,
+            Err(e) => { return Err(()); }
+        };
 
         let exchange = "Bitstamp";
 

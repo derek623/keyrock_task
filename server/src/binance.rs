@@ -20,7 +20,10 @@ impl Binance {
 impl MarketDataSource for Binance {
     fn normalize(&self, msg: &str) -> Result<OrderBookSnap<10>, ()>{
         
-        let json_msg: Value = serde_json::from_str(msg).unwrap();
+        let json_msg: Value = match serde_json::from_str(msg) {
+            Ok(msg) => msg,
+            Err(e) => { return Err(()); }
+        };
 
         let exchange = "Binance";
         let bids = &json_msg["bids"];
@@ -29,6 +32,14 @@ impl MarketDataSource for Binance {
         let mut orderbook: OrderBookSnap<{Binance::MAX_DEPTH}> = OrderBookSnap::new();
 
         for index in 0..Binance::MAX_DEPTH {
+            /*let price = match bids[index][0].as_f64().unwrap() {
+                Ok(p) => p,
+                Err(e) => { return Err(); }
+            };
+            let amount = match bids[index][1].as_f64().unwrap() {
+                Ok(p) => p,
+                Err(e) => { return Err(); }
+            };*/
             orderbook.add_bid(Level{
                 exchange: exchange.to_string(), 
                 price: bids[index][0].as_str().unwrap().parse::<f32>().unwrap(), 
