@@ -7,16 +7,26 @@ use tokio::io::Result;
 use bitstamp::Bitstamp;
 use binance::Binance;
 use marketdatasource::MarketDataSource;
+use std::env;
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
 
-    let bitstamp = Bitstamp::new("wss://ws.bitstamp.net", "ethbtc");
+    let args: Vec<String> = env::args().collect();
+    //dbg!(args);
+
+    if args.len() != 2 {
+        println!("Missing arguments: Usage: server <currency>");
+        return Ok(());
+    };
+
+    let currency = &args[1];
+    let bitstamp = Bitstamp::new("wss://ws.bitstamp.net", &currency);
     let bitstamp_stream = tokio::spawn( async move {
         bitstamp.run().await;
     });
 
-    let binance = Binance::new("wss://stream.binance.com:9443/ws/", "ethbtc"); //ethbtc@depth10@100ms
+    let binance = Binance::new("wss://stream.binance.com:9443/ws/", &currency); //ethbtc@depth10@100ms
     let binance_stream = tokio::spawn( async move {
         binance.run().await;
     });
