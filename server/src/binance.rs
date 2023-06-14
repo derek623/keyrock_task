@@ -3,8 +3,20 @@ use futures_util::StreamExt;
 use crate::MarketDataSource;
 use async_trait::async_trait;
 use crate::order_book_snap::{OrderBookSnap, Level};
-use serde_json::Value;
+use serde_json::{json, Value};
+use serde::{Deserialize};
 
+#[derive(Debug, Deserialize)]
+struct BinanceLevel {
+    price: String,
+    amount: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct BinanceJson {
+    bids: Vec<BinanceLevel>,
+    asks: Vec<BinanceLevel>,
+}
 pub struct Binance {
     address: String,
     currency: String
@@ -20,34 +32,40 @@ impl Binance {
 impl MarketDataSource for Binance {
     fn normalize(&self, msg: &str) -> Result<OrderBookSnap<10>, ()>{
         
-        let json_msg: Value = match serde_json::from_str(msg) {
+        let json_msg: BinanceJson = match serde_json::from_str(msg) {
             Ok(msg) => msg,
             Err(e) => { return Err(()); }
         };
-
+        //println!("binance JSON is: {:#?}\n", json_msg);
         let exchange = "Binance";
-        let bids = &json_msg["bids"];
-        let asks = &json_msg["asks"];
 
         let mut orderbook: OrderBookSnap<{Binance::MAX_DEPTH}> = OrderBookSnap::new();
 
         for index in 0..Binance::MAX_DEPTH {
-            /*let price = match bids[index][0].as_f64().unwrap() {
+            let price = match json_msg.bids[index].price.parse::<f32>() {
                 Ok(p) => p,
-                Err(e) => { return Err(); }
+                Err(_) => { return Err(()); }
             };
-            let amount = match bids[index][1].as_f64().unwrap() {
+            let amount = match json_msg.bids[index].amount.parse::<f32>() {
                 Ok(p) => p,
-                Err(e) => { return Err(); }
-            };*/
+                Err(_) => { return Err(()); }
+            };
             orderbook.add_bid(Level{
                 exchange: exchange.to_string(), 
-                price: bids[index][0].as_str().unwrap().parse::<f32>().unwrap(), 
-                amount: bids[index][1].as_str().unwrap().parse::<f32>().unwrap()});
+                price, 
+                amount});
+            let price = match json_msg.asks[index].price.parse::<f32>() {
+                Ok(p) => p,
+                Err(_) => { return Err(()); }
+            };
+            let amount = match json_msg.asks[index].amount.parse::<f32>() {
+                Ok(p) => p,
+                Err(_) => { return Err(()); }
+            };
             orderbook.add_ask(Level{
                 exchange: exchange.to_string(), 
-                price: asks[index][0].as_str().unwrap().parse::<f32>().unwrap(), 
-                amount: asks[index][1].as_str().unwrap().parse::<f32>().unwrap()});
+                price, 
+                amount});
         }
         
         println!("Binance snap: {:#?}", orderbook);
