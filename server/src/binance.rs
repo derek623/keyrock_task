@@ -41,7 +41,7 @@ impl MarketDataSource for Binance {
         //println!("binance JSON is: {:#?}\n", json_msg);
         //let exchange = "Binance";
 
-        let mut orderbook = OrderBookSnap::new(Exchanges::BINANCE, self.depth);
+        let mut orderbook = OrderBookSnap::new(Exchanges::BINANCE, self.depth, &self.currency);
 
         for index in 0..self.depth {
             let price = match json_msg.bids[index].price.parse::<f32>() {

@@ -39,7 +39,7 @@ pub async fn main() -> Result<()> {
         binance.run().await;
     });
 
-    let mut aggregator = Aggregator::new(rx, 2);
+    let mut aggregator = Aggregator::new(rx, 2 * DEFAULT_DEPTH);
     let aggregator_stream = tokio::spawn( async move {
         aggregator.run().await;
     });

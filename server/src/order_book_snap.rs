@@ -12,14 +12,14 @@ pub struct OrderBookSnap {
     pub bids: Vec<Level>,
     pub asks: Vec<Level>,
     exchange: Exchanges,
-    depth: usize,
+    currency: String,
 }
 
 impl OrderBookSnap {
-    pub fn new(exchange: Exchanges, depth: usize) -> OrderBookSnap{
+    pub fn new(exchange: Exchanges, depth: usize, currency: &str) -> OrderBookSnap{
         let bids = Vec::with_capacity(depth);
         let asks = Vec::with_capacity(depth);
-        OrderBookSnap{ bids, asks, exchange, depth}
+        OrderBookSnap{ bids, asks, exchange, currency: currency.to_string() }
     }
     pub fn add_bid(&mut self, level: Level)
     {
@@ -30,11 +30,11 @@ impl OrderBookSnap {
         self.asks.push(level);
     }
 
-    /*pub fn get_depth(&self) -> usize {
-        self.depth
-    }*/
-
     pub fn get_exchange(&self) -> &Exchanges {
         &self.exchange
+    }
+
+    pub fn get_currency(&self) -> &str {
+        &self.currency
     }
 }

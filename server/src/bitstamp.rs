@@ -54,7 +54,7 @@ impl MarketDataSource for Bitstamp {
         //println!("bitstamp JSON is: {:#?}\n", json_msg);
 
         //let exchange = "Bitstamp";
-        let mut orderbook = OrderBookSnap::new(Exchanges::BITSTAMP, self.depth);
+        let mut orderbook = OrderBookSnap::new(Exchanges::BITSTAMP, self.depth, &self.currency);
 
         for index in 0..self.depth {
             let price = match json_msg.data.bids[index].price.parse::<f32>() {
