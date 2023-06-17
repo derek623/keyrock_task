@@ -5,11 +5,14 @@ use async_trait::async_trait;
 use crate::order_book_snap::{OrderBookSnap, Level};
 use serde::{Deserialize};
 use tokio::sync::mpsc::Sender;
+use crate::utility::de_f64_or_string_as_f64;
 
 #[derive(Debug, Deserialize)]
 struct BinanceLevel {
-    price: String,
-    amount: String,
+    #[serde(deserialize_with  = "de_f64_or_string_as_f64")]
+    price: f64,
+    #[serde(deserialize_with  = "de_f64_or_string_as_f64")]
+    amount: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -44,30 +47,14 @@ impl MarketDataSource for Binance {
         let mut orderbook = OrderBookSnap::new(Exchanges::BINANCE, self.depth, &self.currency);
 
         for index in 0..self.depth {
-            let price = match json_msg.bids[index].price.parse::<f32>() {
-                Ok(p) => p,
-                Err(_) => { return Err(()); }
-            };
-            let amount = match json_msg.bids[index].amount.parse::<f32>() {
-                Ok(p) => p,
-                Err(_) => { return Err(()); }
-            };
             orderbook.add_bid(Level{
                 exchange: Exchanges::BINANCE, 
-                price, 
-                amount});
-            let price = match json_msg.asks[index].price.parse::<f32>() {
-                Ok(p) => p,
-                Err(_) => { return Err(()); }
-            };
-            let amount = match json_msg.asks[index].amount.parse::<f32>() {
-                Ok(p) => p,
-                Err(_) => { return Err(()); }
-            };
+                price: json_msg.bids[index].price, 
+                amount: json_msg.bids[index].amount});
             orderbook.add_ask(Level{
                 exchange: Exchanges::BINANCE,
-                price, 
-                amount});
+                price: json_msg.asks[index].price, 
+                amount: json_msg.asks[index].amount});
         }
         
         //println!("Binance snap: {:#?}", orderbook);
@@ -83,19 +70,19 @@ impl MarketDataSource for Binance {
     
         let (ws_stream, _response) = connect_async(url).await.expect("Failed to connect");
     
-        let (mut write, read) = ws_stream.split();
+        let (mut write, mut read) = ws_stream.split();
       
-        let read_future = read.for_each(|message| async {
-            
-             let data = message.unwrap().into_text().unwrap();
+        while let Some(msg) = read.next().await {
+            let data = msg.unwrap().into_text().unwrap();
              match self.normalize(&data) {
-                Ok(orderbook) => { self.sender.send(orderbook).await; },
+                Ok(orderbook) => { 
+                    if let Err(msg) = self.sender.send(orderbook).await {
+                        println!("Failed to send orderbook snap: {msg}");
+                    }; 
+                },
                 Err(_) => { println!("Failed to normalize msg for binance") },
              }
-            
-        });
-    
-        read_future.await;
+        }
     }
 
 }

@@ -3,14 +3,17 @@ use futures_util::{StreamExt, SinkExt};
 use async_trait::async_trait;
 use crate::order_book_snap::{OrderBookSnap, Level};
 use crate::{MarketDataSource, order_book_snap, marketdatasource::Exchanges};
-use serde_json::{json};
-use serde::{Deserialize};
+use serde_json::json;
+use serde::Deserialize;
 use tokio::sync::mpsc::Sender;
+use crate::utility::de_f64_or_string_as_f64;
 
 #[derive(Debug, Deserialize)]
 struct BitstampLevel {
-    price: String,
-    amount: String,
+    #[serde(deserialize_with  = "de_f64_or_string_as_f64")]
+    price: f64,
+    #[serde(deserialize_with  = "de_f64_or_string_as_f64")]
+    amount: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,30 +60,14 @@ impl MarketDataSource for Bitstamp {
         let mut orderbook = OrderBookSnap::new(Exchanges::BITSTAMP, self.depth, &self.currency);
 
         for index in 0..self.depth {
-            let price = match json_msg.data.bids[index].price.parse::<f32>() {
-                Ok(p) => p,
-                Err(_) => { return Err(()); }
-            };
-            let amount = match json_msg.data.bids[index].amount.parse::<f32>() {
-                Ok(p) => p,
-                Err(_) => { return Err(()); }
-            };
             orderbook.add_bid(Level{
                 exchange: Exchanges::BITSTAMP, 
-                price, 
-                amount});
-            let price = match json_msg.data.asks[index].price.parse::<f32>() {
-                Ok(p) => p,
-                Err(_) => { return Err(()); }
-            };
-            let amount = match json_msg.data.asks[index].amount.parse::<f32>() {
-                Ok(p) => p,
-                Err(_) => { return Err(()); }
-            };
+                price: json_msg.data.bids[index].price, 
+                amount: json_msg.data.bids[index].amount});
             orderbook.add_ask(Level{
                 exchange: Exchanges::BITSTAMP, 
-                price, 
-                amount});
+                price: json_msg.data.asks[index].price, 
+                amount: json_msg.data.asks[index].amount});
         }
         
         //println!("Bitstamp snap: {:#?}", orderbook);
@@ -93,7 +80,7 @@ impl MarketDataSource for Bitstamp {
     
         let (ws_stream, _response) = connect_async(url).await.expect("Failed to connect");
             
-        let (mut write, read) = ws_stream.split();
+        let (mut write, mut read) = ws_stream.split();
       
         let msg = json!({
             "event": "bts:subscribe",
@@ -103,17 +90,17 @@ impl MarketDataSource for Bitstamp {
         });
         println!("Bitstamp sub message: {}", msg.to_string());
         write.send(Message::Text(msg.to_string())).await.unwrap();
-        
-    
-        let read_future = read.for_each(|message| async {
-            let data = message.unwrap().into_text().unwrap();
-            match self.normalize(&data) {
-               Ok(orderbook) => { self.sender.send(orderbook).await; },
-               Err(_) => println!("Failed to normalize msg for bitstamp: {data}"),
-            }
-        });
-    
-        read_future.await;
+
+        while let Some(msg) = read.next().await {
+            let data = msg.unwrap().into_text().unwrap();
+             match self.normalize(&data) {
+                Ok(orderbook) => { 
+                    if let Err(msg) = self.sender.send(orderbook).await {
+                        println!("Failed to send orderbook snap: {msg}");
+                    }; },
+                Err(_) => { println!("Failed to normalize msg for bitstamp") },
+             }
+        }
     }
 
 }

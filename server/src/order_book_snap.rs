@@ -3,8 +3,8 @@ use crate::marketdatasource::{MarketDataSource, Exchanges};
 #[derive(Debug)]
 pub struct Level {
     pub exchange: Exchanges,
-    pub price: f32,
-    pub amount: f32,
+    pub price: f64,
+    pub amount: f64,
 }
 
 #[derive(Debug)]

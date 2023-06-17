@@ -3,6 +3,7 @@ mod binance;
 mod marketdatasource;
 mod order_book_snap;
 mod aggregator;
+mod utility;
 
 use tokio::{io::Result, sync::mpsc, sync::mpsc::Receiver, sync::mpsc::Sender};
 use bitstamp::Bitstamp;
