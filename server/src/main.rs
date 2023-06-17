@@ -30,12 +30,12 @@ pub async fn main() -> Result<()> {
     let tx2 = tx.clone();
 
     let currency = &args[1];
-    let bitstamp = Bitstamp::new("wss://ws.bitstamp.net", &currency, DEFAULT_DEPTH, tx);
+    let bitstamp = Bitstamp::new("wss://ws.bitstamp.net", &currency, DEFAULT_DEPTH, tx, "bitstamp");
     let bitstamp_stream = tokio::spawn( async move {
         bitstamp.run().await;
     });
 
-    let binance = Binance::new("wss://stream.binance.com:9443/ws/", &currency, DEFAULT_DEPTH, tx2); //ethbtc@depth10@100ms
+    let binance = Binance::new("wss://stream.binance.com:9443/ws/", &currency, DEFAULT_DEPTH, tx2, "binance"); //ethbtc@depth10@100ms
     let binance_stream = tokio::spawn( async move {
         binance.run().await;
     });
@@ -52,6 +52,7 @@ pub async fn main() -> Result<()> {
     /*tokio::select! {
         _ = bitstamp_stream => {},
         _ = binance_stream => {}
+        _ = aggregator_stream => {},
     };*/
     //bitstamp_stream.await?;
     /*let bitstamp = Bitstamp::new("wss://ws.bitstamp.net");
