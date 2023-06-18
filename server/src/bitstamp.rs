@@ -1,8 +1,9 @@
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use futures_util::{StreamExt, SinkExt};
 use async_trait::async_trait;
-use crate::order_book_snap::{OrderBookSnap, Level};
-use crate::{order_book_snap, marketdatasource::Exchanges, marketdatasource::MarketDataSourceInfo, marketdatasource::MarketDataSource};
+use crate::order_book_snap::OrderBookSnap;
+use crate::marketdatasource::Level;
+use crate::{marketdatasource::Exchanges, marketdatasource::MarketDataSourceInfo, marketdatasource::MarketDataSource};
 use serde_json::{json, Value};
 use serde::Deserialize;
 use tokio::sync::mpsc::Sender;
@@ -75,14 +76,14 @@ impl MarketDataSource for Bitstamp {
         //println!("bitstamp JSON is: {:#?}\n", json_msg);
 
         //let exchange = "Bitstamp";
-        let mut orderbook = OrderBookSnap::new(Exchanges::BITSTAMP, self.info.depth, &self.info.currency);
+        let mut order_book_snap = OrderBookSnap::new(Exchanges::BITSTAMP, self.info.depth, &self.info.currency);
 
         for index in 0..self.info.depth {
-            orderbook.add_bid(Level{
+            order_book_snap.order_book.add_bid(Level{
                 exchange: Exchanges::BITSTAMP, 
                 price: json_msg.data.bids[index].price, 
                 amount: json_msg.data.bids[index].amount});
-            orderbook.add_ask(Level{
+            order_book_snap.order_book.add_ask(Level{
                 exchange: Exchanges::BITSTAMP, 
                 price: json_msg.data.asks[index].price, 
                 amount: json_msg.data.asks[index].amount});
@@ -90,7 +91,7 @@ impl MarketDataSource for Bitstamp {
         
         //println!("Bitstamp snap: {:#?}", orderbook);
         
-        Ok(orderbook)
+        Ok(order_book_snap)
     }
     
     async fn run(&self) {

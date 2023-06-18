@@ -1,40 +1,23 @@
-use crate::marketdatasource::{MarketDataSource, Exchanges};
-
-#[derive(Debug)]
-pub struct Level {
-    pub exchange: Exchanges,
-    pub price: f64,
-    pub amount: f64,
-}
+use crate::marketdatasource::{Exchanges, OrderBook};
 
 #[derive(Debug)]
 pub struct OrderBookSnap {
-    pub bids: Vec<Level>,
-    pub asks: Vec<Level>,
-    exchange: Exchanges,
-    currency: String,
+    pub exchange: Exchanges,
+    pub order_book: OrderBook,
 }
 
 impl OrderBookSnap {
     pub fn new(exchange: Exchanges, depth: usize, currency: &str) -> OrderBookSnap{
-        let bids = Vec::with_capacity(depth);
-        let asks = Vec::with_capacity(depth);
-        OrderBookSnap{ bids, asks, exchange, currency: currency.to_string() }
-    }
-    pub fn add_bid(&mut self, level: Level)
-    {
-        self.bids.push(level);
-    }
-    pub fn add_ask(&mut self, level: Level)
-    {
-        self.asks.push(level);
+        OrderBookSnap{ exchange, 
+            order_book: OrderBook::new (
+                Vec::with_capacity(depth), 
+                Vec::with_capacity(depth), 
+                currency, 
+            )
+        }
     }
 
     pub fn get_exchange(&self) -> &Exchanges {
         &self.exchange
-    }
-
-    pub fn get_currency(&self) -> &str {
-        &self.currency
     }
 }

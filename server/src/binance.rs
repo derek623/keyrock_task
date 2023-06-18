@@ -2,7 +2,8 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use futures_util::StreamExt;
 use crate::{order_book_snap, marketdatasource::Exchanges, marketdatasource::MarketDataSource, marketdatasource::MarketDataSourceInfo};
 use async_trait::async_trait;
-use crate::order_book_snap::{OrderBookSnap, Level};
+use crate::marketdatasource::Level;
+use crate::order_book_snap::OrderBookSnap;
 use serde::{Deserialize};
 use tokio::sync::mpsc::Sender;
 use crate::utility::de_f64_or_string_as_f64;
@@ -47,14 +48,14 @@ impl MarketDataSource for Binance {
         //println!("binance JSON is: {:#?}\n", json_msg);
         //let exchange = "Binance";
 
-        let mut orderbook = OrderBookSnap::new(Exchanges::BINANCE, self.info.depth, &self.info.currency);
+        let mut order_book_snap = OrderBookSnap::new(Exchanges::BINANCE, self.info.depth, &self.info.currency);
 
         for index in 0..self.info.depth {
-            orderbook.add_bid(Level{
+            order_book_snap.order_book.add_bid(Level{
                 exchange: Exchanges::BINANCE, 
                 price: json_msg.bids[index].price, 
                 amount: json_msg.bids[index].amount});
-            orderbook.add_ask(Level{
+                order_book_snap.order_book.add_ask(Level{
                 exchange: Exchanges::BINANCE,
                 price: json_msg.asks[index].price, 
                 amount: json_msg.asks[index].amount});
@@ -62,7 +63,7 @@ impl MarketDataSource for Binance {
         
         //println!("Binance snap: {:#?}", orderbook);
         
-        Ok(orderbook)
+        Ok(order_book_snap)
     }
 
     async fn run(&self) {
