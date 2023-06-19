@@ -40,7 +40,7 @@ pub async fn main() -> Result<()> {
         binance.run().await;
     });
 
-    let mut aggregator = Aggregator::new(rx, 2 * DEFAULT_DEPTH);
+    let mut aggregator = Aggregator::new(rx, 2 * DEFAULT_DEPTH); //The aggretor only needs to keep 2 * depth of bid/ask not matter how many sources we have
     let aggregator_stream = tokio::spawn( async move {
         aggregator.run().await;
     });

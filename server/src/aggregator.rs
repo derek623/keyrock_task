@@ -2,6 +2,7 @@ use tokio::{sync::mpsc::Receiver};
 use crate::order_book_snap::OrderBookSnap;
 use std::collections::HashMap;
 use crate::marketdatasource::{OrderBook, Level};
+use std::cmp::Ordering;
 
 /*pub struct AggregatedLevel {
     exchange: Exchanges,
@@ -92,7 +93,13 @@ impl Aggregator {
                         new_bids.push(n.to_owned());
                     }
                 }
-                new_bids.sort_by(|l1, l2| l2.price.partial_cmp(&l1.price).unwrap() );
+                new_bids.sort_unstable_by(|l1, l2| {
+                    if l2.price > l1.price {
+                        Ordering::Greater
+                    } else {
+                        Ordering::Less
+                    }
+                });
                 order_book.bids = new_bids;
                 println!("\norder_book.bids = {:?}", order_book.bids);
                 //merge ask
@@ -105,7 +112,13 @@ impl Aggregator {
                         new_asks.push(n.to_owned());
                     }
                 }
-                new_asks.sort_by(|l1, l2| l1.price.partial_cmp(&l2.price).unwrap() );
+                new_asks.sort_unstable_by(|l1, l2| {
+                    if l1.price < l2.price {
+                        Ordering::Less
+                    } else {
+                        Ordering::Greater
+                    }
+                } );
                 order_book.asks = new_asks;
                 println!("order_book.asks = {:?}", order_book.asks);
                 
