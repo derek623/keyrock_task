@@ -29,17 +29,32 @@ impl Aggregator {
         Aggregator { rx, currency_to_agg_orderbook_map: HashMap::new(), max_depth }
     }
 
-    pub fn merge(&mut self, order_book_snap: OrderBookSnap) {
+    /*pub fn merge_side<F>(&self, new_side: &mut Vec<Level>, old_side: &Vec<Level>, exchange: &Exchanges, cmp: F) where
+    F: FnMut(&Level, &Level) -> Ordering {
+        //let mut new_bids: Vec<Level> = order_book_snap.order_book.bids;
+        new_side.reserve(self.max_depth - new_side.len());
+        //new bids now contain all the entry from order_book_snap. Next is to insert all entries from the existing merge order book 
+        //which is not from this exchange to the new vector
+        for n in old_side{
+            if exchange != &n.exchange {
+                new_side.push(n.to_owned());
+            }
+        }
+        new_side.sort_unstable_by(cmp);
+        //agg_order_book.order_book.bids = new_side;
+    }*/
+
+    pub fn merge(&mut self, order_book_snap: OrderBookSnap) -> Result<(), String> {
         /*match order_book_snap.get_exchange() {
             Exchanges::BINANCE => { println!("Aggregator got Binance msg: {:#?}", order_book_snap); }
             Exchanges::BITSTAMP => { println!("Aggregator got Bitstamp msg: {:#?}", order_book_snap); }
         }*/
 
         use std::collections::hash_map::Entry;
-        match self.currency_to_agg_orderbook_map.entry(order_book_snap.order_book.currency.to_string()) {
-            Entry::Occupied(mut o) => {
+        let agg_order_book = match self.currency_to_agg_orderbook_map.entry(order_book_snap.order_book.currency.to_string()) {
+            Entry::Occupied(o) => {
                 let exchange = order_book_snap.exchange;
-                let mut agg_order_book = o.get_mut();
+                let mut agg_order_book = o.into_mut();
                 //merge bid
                 let mut new_bids: Vec<Level> = order_book_snap.order_book.bids;
                 new_bids.reserve(self.max_depth - new_bids.len());
@@ -58,7 +73,7 @@ impl Aggregator {
                     }
                 });
                 agg_order_book.order_book.bids = new_bids;
-                println!("\norder_book.bids = {:?}", agg_order_book.order_book.bids);
+
                 //merge ask
                 let mut new_asks: Vec<Level> = order_book_snap.order_book.asks;
                 new_asks.reserve(self.max_depth - new_asks.len());
@@ -77,26 +92,39 @@ impl Aggregator {
                     }
                 } );
                 agg_order_book.order_book.asks = new_asks;
-                println!("order_book.asks = {:?}", agg_order_book.order_book.asks);
+
+                agg_order_book
                 
             },
             Entry::Vacant(v) => { 
                 let mut order_book = order_book_snap.order_book; 
                 {
-                    let mut asks = &mut order_book.asks;
+                    let asks = &mut order_book.asks;
                     asks.reserve(self.max_depth - asks.len());
                 }
-                let mut bids = &mut order_book.bids;
+                let bids = &mut order_book.bids;
                 bids.reserve(self.max_depth - bids.len());
                 println!("Creating orderbook for {}: {:?}", order_book.currency, order_book);
-                v.insert(AggregatedOrderBook::new(0_f64, order_book));
+                v.insert(AggregatedOrderBook::new(0_f64, order_book))
             },
+        };
+
+        //now calculate the spread
+        println!("agg_order_book is = {:?}", agg_order_book);
+        if agg_order_book.order_book.bids.len() <= 0 || agg_order_book.order_book.asks.len() <= 0 {
+            return Err("Fail to calculate spread as either bid or ask queue are empty".to_string());
         }
+        agg_order_book.spread = agg_order_book.order_book.asks[0].price - agg_order_book.order_book.bids[0].price;
+
+        Ok(())
     }
 
     pub async fn run(&mut self) {
         while let Some(msg) = self.rx.recv().await {
-            self.merge(msg);
+            match self.merge(msg) {
+                Ok(_) => { /*send agg_order_book to the channel*/},
+                Err(emsg) => { println!("Merging snapshot return error: {}", emsg); },
+            }
             //println!("Aggregator got {:#?}", msg);
         }
     }
