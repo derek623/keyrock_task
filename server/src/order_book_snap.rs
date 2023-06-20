@@ -16,8 +16,4 @@ impl OrderBookSnap {
             )
         }
     }
-
-    pub fn get_exchange(&self) -> &Exchanges {
-        &self.exchange
-    }
 }

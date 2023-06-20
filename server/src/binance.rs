@@ -55,7 +55,7 @@ impl MarketDataSource for Binance {
                 exchange: Exchanges::BINANCE, 
                 price: json_msg.bids[index].price, 
                 amount: json_msg.bids[index].amount});
-                order_book_snap.order_book.add_ask(Level{
+            order_book_snap.order_book.add_ask(Level{
                 exchange: Exchanges::BINANCE,
                 price: json_msg.asks[index].price, 
                 amount: json_msg.asks[index].amount});

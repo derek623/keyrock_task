@@ -2,24 +2,25 @@ use async_trait::async_trait;
 use crate::order_book_snap::OrderBookSnap;
 use tokio::sync::mpsc::Sender;
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default)]
 pub enum Exchanges {
     BINANCE,
     BITSTAMP,
+    #[default] UNKNOWN,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Level {
     pub exchange: Exchanges,
     pub price: f64,
     pub amount: f64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct OrderBook {
     pub bids: Vec<Level>,
     pub asks: Vec<Level>,
-    currency: String,
+    pub currency: String,
 }
 
 impl OrderBook {
@@ -35,22 +36,7 @@ impl OrderBook {
     {
         self.asks.push(level);
     }
-    pub fn get_bids_mut(&mut self) -> &mut Vec<Level> {
-        &mut self.bids
-    }
-    /*pub fn get_bids(&self) -> &Vec<Level> {
-        &self.bids
-    }*/
-    pub fn get_asks_mut(&mut self) -> &mut Vec<Level> {
-        &mut self.asks
-    }
-    /*pub fn get_asks(&self) -> &Vec<Level> {
-        &self.asks
-    }*/
 
-    pub fn get_currency(&self) -> &str {
-        &self.currency
-    }
 }
 
 pub struct MarketDataSourceInfo {
