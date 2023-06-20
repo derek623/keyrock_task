@@ -1,9 +1,7 @@
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use futures_util::{StreamExt, SinkExt};
 use async_trait::async_trait;
-use crate::order_book_snap::OrderBookSnap;
-use crate::marketdatasource::Level;
-use crate::{marketdatasource::Exchanges, marketdatasource::MarketDataSourceInfo, marketdatasource::MarketDataSource};
+use crate::marketdatasource::{Exchanges, MarketDataSourceInfo, MarketDataSource, OrderBookSnap, Level};
 use serde_json::{json, Value};
 use serde::Deserialize;
 use tokio::sync::mpsc::Sender;

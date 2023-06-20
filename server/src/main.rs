@@ -1,14 +1,13 @@
 mod bitstamp;
 mod binance;
 mod marketdatasource;
-mod order_book_snap;
 mod aggregator;
 mod utility;
 
 use tokio::{io::Result, sync::mpsc, sync::mpsc::Receiver, sync::mpsc::Sender};
 use bitstamp::Bitstamp;
 use binance::Binance;
-use marketdatasource::MarketDataSource;
+use marketdatasource::{MarketDataSource, OrderBookSnap};
 use aggregator::Aggregator;
 use std::env;
 
@@ -26,7 +25,7 @@ pub async fn main() -> Result<()> {
     };
 
     //let (tx: Sender<order_book_snap::OrderBookSnap>, mut rx: Receiver<order_book_snap::OrderBookSnap>) = mpsc::channel(CHANNEL_SIZE);
-    let (tx, rx) : (Sender<order_book_snap::OrderBookSnap>, Receiver<order_book_snap::OrderBookSnap>) = mpsc::channel(CHANNEL_SIZE);
+    let (tx, rx) : (Sender<OrderBookSnap>, Receiver<OrderBookSnap>) = mpsc::channel(CHANNEL_SIZE);
     let tx2 = tx.clone();
 
     let currency = &args[1];

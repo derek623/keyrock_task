@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use crate::order_book_snap::OrderBookSnap;
 use tokio::sync::mpsc::Sender;
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default)]
@@ -37,6 +36,24 @@ impl OrderBook {
         self.asks.push(level);
     }
 
+}
+
+#[derive(Debug)]
+pub struct OrderBookSnap {
+    pub exchange: Exchanges,
+    pub order_book: OrderBook,
+}
+
+impl OrderBookSnap {
+    pub fn new(exchange: Exchanges, depth: usize, currency: &str) -> OrderBookSnap{
+        OrderBookSnap{ exchange, 
+            order_book: OrderBook::new (
+                Vec::with_capacity(depth), 
+                Vec::with_capacity(depth), 
+                currency, 
+            )
+        }
+    }
 }
 
 pub struct MarketDataSourceInfo {

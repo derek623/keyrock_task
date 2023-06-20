@@ -1,9 +1,7 @@
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use futures_util::StreamExt;
-use crate::{order_book_snap, marketdatasource::Exchanges, marketdatasource::MarketDataSource, marketdatasource::MarketDataSourceInfo};
+use crate::marketdatasource::{Exchanges, MarketDataSourceInfo, MarketDataSource, OrderBookSnap, Level};
 use async_trait::async_trait;
-use crate::marketdatasource::Level;
-use crate::order_book_snap::OrderBookSnap;
 use serde::{Deserialize};
 use tokio::sync::mpsc::Sender;
 use crate::utility::de_f64_or_string_as_f64;
@@ -26,7 +24,7 @@ pub struct Binance {
 }
 
 impl Binance {
-    pub fn new(address: &str, currency: &str, depth: usize, sender: Sender<order_book_snap::OrderBookSnap>, name: &str) -> impl MarketDataSource {
+    pub fn new(address: &str, currency: &str, depth: usize, sender: Sender<OrderBookSnap>, name: &str) -> impl MarketDataSource {
         Binance { info: MarketDataSourceInfo { 
             address: address.to_string(), 
             currency: currency.to_string(), 

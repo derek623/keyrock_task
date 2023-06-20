@@ -1,7 +1,6 @@
 use tokio::{sync::mpsc::Receiver};
-use crate::order_book_snap::OrderBookSnap;
 use std::collections::HashMap;
-use crate::marketdatasource::{OrderBook, Level};
+use crate::marketdatasource::{OrderBook, Level, OrderBookSnap};
 use std::cmp::Ordering;
 
 #[derive(Default, Debug)]
