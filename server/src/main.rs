@@ -3,6 +3,11 @@ mod binance;
 mod marketdatasource;
 mod aggregator;
 mod utility;
+mod aggregator_grpc_server;
+
+pub mod orderbook {
+    tonic::include_proto!("orderbook");
+}
 
 use tokio::{io::Result, sync::mpsc, sync::mpsc::Receiver, sync::mpsc::Sender};
 use bitstamp::Bitstamp;
