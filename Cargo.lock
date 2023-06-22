@@ -120,6 +120,9 @@ name = "client"
 version = "0.1.0"
 dependencies = [
  "prost",
+ "tokio",
+ "tokio-stream",
+ "tokio-tungstenite",
  "tonic",
  "tonic-build",
 ]
@@ -924,6 +927,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tokio-stream",
  "tokio-tungstenite",
  "tonic",
  "tonic-build",

@@ -1,21 +1,8 @@
 use async_trait::async_trait;
 use tokio::sync::mpsc::Sender;
+use crate::orderbook::Level;
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Default)]
-pub enum Exchanges {
-    BINANCE,
-    BITSTAMP,
-    #[default] UNKNOWN,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct Level {
-    pub exchange: Exchanges,
-    pub price: f64,
-    pub amount: f64,
-}
-
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct OrderBook {
     pub bids: Vec<Level>,
     pub asks: Vec<Level>,
@@ -40,12 +27,12 @@ impl OrderBook {
 
 #[derive(Debug)]
 pub struct OrderBookSnap {
-    pub exchange: Exchanges,
+    pub exchange: String,
     pub order_book: OrderBook,
 }
 
 impl OrderBookSnap {
-    pub fn new(exchange: Exchanges, depth: usize, currency: &str) -> OrderBookSnap{
+    pub fn new(exchange: String, depth: usize, currency: &str) -> OrderBookSnap{
         OrderBookSnap{ exchange, 
             order_book: OrderBook::new (
                 Vec::with_capacity(depth), 

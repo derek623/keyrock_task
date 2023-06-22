@@ -1,6 +1,7 @@
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use futures_util::StreamExt;
-use crate::marketdatasource::{Exchanges, MarketDataSourceInfo, MarketDataSource, OrderBookSnap, Level};
+use crate::marketdatasource::{MarketDataSourceInfo, MarketDataSource, OrderBookSnap};
+use crate::orderbook::Level;
 use async_trait::async_trait;
 use serde::{Deserialize};
 use tokio::sync::mpsc::Sender;
@@ -46,15 +47,15 @@ impl MarketDataSource for Binance {
         //println!("binance JSON is: {:#?}\n", json_msg);
         //let exchange = "Binance";
 
-        let mut order_book_snap = OrderBookSnap::new(Exchanges::BINANCE, self.info.depth, &self.info.currency);
+        let mut order_book_snap = OrderBookSnap::new(self.info.name.to_string(), self.info.depth, &self.info.currency);
 
         for index in 0..self.info.depth {
             order_book_snap.order_book.add_bid(Level{
-                exchange: Exchanges::BINANCE, 
+                exchange: self.info.name.to_string(), 
                 price: json_msg.bids[index].price, 
                 amount: json_msg.bids[index].amount});
             order_book_snap.order_book.add_ask(Level{
-                exchange: Exchanges::BINANCE,
+                exchange: self.info.name.to_string(),
                 price: json_msg.asks[index].price, 
                 amount: json_msg.asks[index].amount});
         }
@@ -84,7 +85,7 @@ impl MarketDataSource for Binance {
             }
         };
     
-        let (mut write, mut read) = ws_stream.split();
+        let (write, mut read) = ws_stream.split();
       
         while let Some(msg) = read.next().await {
              let message = match msg {
