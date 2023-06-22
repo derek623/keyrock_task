@@ -40,24 +40,29 @@ pub async fn main() -> Result<()> {
     let ob_tx2 = ob_tx.clone();
 
     let currency = &args[1];
-    let bitstamp = Bitstamp::new("wss://ws.bitstamp.net", &currency, DEFAULT_DEPTH, ob_tx, "bitstamp");
+    let depth = match args.len() {
+        2 => DEFAULT_DEPTH,
+        _ => { args[2].parse::<usize>().expect("Cannot get the depth from command line argument") }
+    };
+
+    let bitstamp = Bitstamp::new("wss://ws.bitstamp.net", &currency, depth, ob_tx, "bitstamp");
     let bitstamp_stream = tokio::spawn( async move {
         bitstamp.run().await;
     });
 
-    let binance = Binance::new("wss://stream.binance.com:9443/ws/", &currency, DEFAULT_DEPTH, ob_tx2, "binance"); //ethbtc@depth10@100ms
+    let binance = Binance::new("wss://stream.binance.com:9443/ws/", &currency, depth, ob_tx2, "binance"); //ethbtc@depth10@100ms
     let binance_stream = tokio::spawn( async move {
         binance.run().await;
     });
 
     let (ag_ob_tx, ag_ob_rx) : (Sender<AggregatedOrderBook>, Receiver<AggregatedOrderBook>) = mpsc::channel(CHANNEL_SIZE);
-    let mut aggregator = Aggregator::new(ob_rx, ag_ob_tx, DEFAULT_DEPTH);
+    let mut aggregator = Aggregator::new(ob_rx, ag_ob_tx, depth);
     let aggregator_stream = tokio::spawn( async move {
         aggregator.run().await;
     });
     
     let ag_ob_rx = Arc::new(Mutex::new(ag_ob_rx));
-    let server: OrderBookAggregatorService = OrderBookAggregatorService::new(ag_ob_rx.clone(), DEFAULT_DEPTH);
+    let server: OrderBookAggregatorService = OrderBookAggregatorService::new(ag_ob_rx.clone(), depth);
     let order_aggregator_server = Server::builder()
         .add_service(orderbook::orderbook_aggregator_server::OrderbookAggregatorServer::new(server))
         .serve(GRPC_SERVER_URL.to_socket_addrs().unwrap().next().unwrap());

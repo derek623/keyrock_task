@@ -63,12 +63,17 @@ impl Aggregator {
                     }
                 }
                 new_bids.sort_unstable_by(|l1, l2| {
-                    if l2.price > l1.price {
+                    if l2.price > l1.price || (l2.price == l1.price && l2.amount > l1.amount){
                         Ordering::Greater
                     } else {
                         Ordering::Less
                     }
                 });
+
+                /*if agg_order_book.order_book.bids.iter().zip(new_bids.iter()).filter(|&(a, b)| a == b ).count() == self.max_depth {
+                    println!("No chance in bids!: {:?}, {:?}", agg_order_book.order_book.bids, new_bids);
+                }*/
+
                 agg_order_book.order_book.bids = new_bids;
 
                 //merge ask
@@ -82,7 +87,7 @@ impl Aggregator {
                     }
                 }
                 new_asks.sort_unstable_by(|l1, l2| {
-                    if l1.price < l2.price {
+                    if l1.price < l2.price  || (l2.price == l1.price && l2.amount > l1.amount){
                         Ordering::Less
                     } else {
                         Ordering::Greater
