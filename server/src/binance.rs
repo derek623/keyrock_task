@@ -38,11 +38,11 @@ impl Binance {
 
 #[async_trait]
 impl MarketDataSource for Binance {
-    fn normalize(&self, msg: &str) -> Result<OrderBookSnap, ()>{
+    fn normalize(&self, msg: &str) -> Result<OrderBookSnap, String>{
         
         let json_msg: BinanceJson = match serde_json::from_str(msg) {
             Ok(msg) => msg,
-            Err(e) => { return Err(()); }
+            Err(e) => { return Err(e.to_string()); }
         };
         //println!("binance JSON is: {:#?}\n", json_msg);
         //let exchange = "Binance";
@@ -102,7 +102,7 @@ impl MarketDataSource for Binance {
                         if let Err(msg) = self.info.sender.send(orderbook).await {
                             println!("Failed to send orderbook snap: {msg}");
                         }; },
-                    Err(_) => { println!("Failed to normalize msg for {}", self.info.name) },
+                    Err(e) => { println!("Failed to normalize msg for {}: {}", self.info.name, e) },
                     }
                 },
                 

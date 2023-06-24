@@ -48,6 +48,7 @@ impl Bitstamp {
             }
         }
     }
+
     pub fn is_successful(&self, msg: &str) -> bool {
         
         let json_msg: Value = match serde_json::from_str(&msg) {
@@ -64,12 +65,11 @@ impl Bitstamp {
 
 #[async_trait]
 impl MarketDataSource for Bitstamp {
-    //fn normalize(&self, msg: &str) -> OrderBookSnap<10> {
-    fn normalize(&self, msg: &str) -> Result<OrderBookSnap, ()> {
+    fn normalize(&self, msg: &str) -> Result<OrderBookSnap, String> {
 
         let json_msg: BitstampJson = match serde_json::from_str(msg) {
             Ok(msg) => msg,
-            Err(e) => { return Err(()); }
+            Err(e) => { return Err(e.to_string()); }
         };
 
         //println!("bitstamp JSON is: {:#?}\n", json_msg);

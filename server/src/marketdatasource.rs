@@ -54,5 +54,5 @@ pub struct MarketDataSourceInfo {
 #[async_trait]
 pub trait MarketDataSource {
     async fn run(&self);
-    fn normalize(&self, msg: &str) -> Result<OrderBookSnap, ()>;
+    fn normalize(&self, msg: &str) -> Result<OrderBookSnap, String>;
 }
