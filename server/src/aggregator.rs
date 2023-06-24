@@ -113,13 +113,13 @@ impl Aggregator {
                 }
                 let bids = &mut order_book.bids;
                 bids.reserve((self.max_depth) - bids.len());
-                println!("Creating orderbook for {}: {:?}", order_book.currency, order_book);
+                log::info!("Creating orderbook for {}: {:?}", order_book.currency, order_book);
                 v.insert(AggregatedOrderBook::new(0_f64, order_book))
             },
         };
 
+        log::info!("{:?}", agg_order_book);
         //now calculate the spread
-        println!("agg_order_book is = {:?}", agg_order_book);
         if agg_order_book.order_book.bids.len() <= 0 || agg_order_book.order_book.asks.len() <= 0 {
             return Err("Fail to calculate spread as either bid or ask queue are empty".to_string());
         }
@@ -134,12 +134,11 @@ impl Aggregator {
                 Ok(agg_order_book) => { 
                     match self.tx.send(agg_order_book).await {
                         Ok(_) => {},
-                        Err(e) => { println!("Fail to send the following Aggreated order book to the grpc server: {:?}", e); },
+                        Err(e) => { log::error!("Fail to send the following Aggreated order book to the grpc server: {:?}", e); },
                     }
                 },
-                Err(emsg) => { println!("Merging snapshot return error: {}", emsg); },
+                Err(emsg) => { log::error!("Merging snapshot return error: {}", emsg); },
             }
-            //println!("Aggregator got {:#?}", msg);
         }
     }
 }

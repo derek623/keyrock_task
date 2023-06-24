@@ -44,8 +44,6 @@ impl MarketDataSource for Binance {
             Ok(msg) => msg,
             Err(e) => { return Err(e.to_string()); }
         };
-        //println!("binance JSON is: {:#?}\n", json_msg);
-        //let exchange = "Binance";
 
         let mut order_book_snap = OrderBookSnap::new(self.info.name.to_string(), self.info.depth, &self.info.currency);
 
@@ -60,8 +58,6 @@ impl MarketDataSource for Binance {
                 amount: json_msg.asks[index].amount});
         }
         
-        //println!("Binance snap: {:#?}", orderbook);
-        
         Ok(order_book_snap)
     }
 
@@ -72,7 +68,7 @@ impl MarketDataSource for Binance {
         let url = match url::Url::parse(&final_address) {
             Ok(u) => u,
             Err(e) => {
-                println!("Failed to parse address for {}: {:?}", self.info.name, e);
+                log::error!("Failed to parse address for {}: {:?}", self.info.name, e);
                 return;
             }
         };
@@ -80,7 +76,7 @@ impl MarketDataSource for Binance {
         let (ws_stream, _response) = match connect_async(url).await{
             Ok((s,r)) => (s, r),
             Err(e) => {
-                println!("Failed to connect to {}: {:?}", self.info.name, e);    
+                log::error!("Failed to connect to {}: {:?}", self.info.name, e);    
                 return;
             }
         };
@@ -91,7 +87,7 @@ impl MarketDataSource for Binance {
              let message = match msg {
                 Ok(m) => m,
                 Err(e) => {
-                    println!("{} recv msg err: {:#?}", self.info.name, e);
+                    log::error!("{} recv msg err: {:#?}", self.info.name, e);
                     continue;
                 }
             };
@@ -100,16 +96,16 @@ impl MarketDataSource for Binance {
                     match self.normalize(&msg) {
                     Ok(orderbook) => { 
                         if let Err(msg) = self.info.sender.send(orderbook).await {
-                            println!("Failed to send orderbook snap: {msg}");
+                            log::error!("Failed to send orderbook snap: {msg}");
                         }; },
-                    Err(e) => { println!("Failed to normalize msg for {}: {}", self.info.name, e) },
+                    Err(e) => { log::error!("Failed to normalize msg for {}: {}", self.info.name, e) },
                     }
                 },
                 
                 Message::Ping(_) | Message::Pong(_) | Message::Frame(_)=> {},
                 Message::Binary(_) => (),
                 Message::Close(e) => {
-                    println!("Disconnected {:?}", e);
+                    log::error!("Disconnected {:?}", e);
                     return;
                 }
             }

@@ -19,6 +19,11 @@ use tonic::transport::Server;
 use tokio::sync::Mutex;
 use std::{net::ToSocketAddrs, sync::Arc};
 use std::env;
+use fast_log::config::Config;
+use fast_log::plugin::file_split::RollingType;
+use fast_log::consts::LogSize;
+use fast_log::plugin::packer::LogPacker;
+use log::LevelFilter;
 
 const GRPC_SERVER_URL: &str = "[::1]:30253";
 
@@ -27,6 +32,13 @@ const DEFAULT_DEPTH: usize = 10;
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
+
+    fast_log::init(Config::new().level(LevelFilter::Info).chan_len(Some(100000)).file_split(
+        "target/logs/",
+        LogSize::MB(50),
+        RollingType::All,
+        LogPacker {},
+    )).expect("Fail to start logger");
 
     let args: Vec<String> = env::args().collect();
 

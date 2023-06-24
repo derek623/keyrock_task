@@ -29,7 +29,7 @@ impl OrderbookAggregator for OrderBookAggregatorService {
         tokio::spawn( async move {
             let mut aob_rx = aob_rx_rc.lock().await;
                 while let Some(msg) = aob_rx.recv().await {
-                        println!("OrderBook_Aggregator_Service got {:?}", msg);
+                    //log::info!("OrderBook_Aggregator_Service got {:?}", msg);
                         let summary = Summary {
                             spread: msg.spread,
                             bids: msg.order_book.bids[0..depth].to_vec(),
@@ -38,7 +38,7 @@ impl OrderbookAggregator for OrderBookAggregatorService {
                         match tx.send(Ok(summary)).await {
                             Ok(_) => {},
                             Err(e) => { 
-                                println!("Fail to send summary: {:?}", e.to_string()); 
+                                log::error!("Fail to send summary: {:?}", e.to_string()); 
                                 break;
                             }
                         }

@@ -54,7 +54,7 @@ impl Bitstamp {
         let json_msg: Value = match serde_json::from_str(&msg) {
             Ok(msg) => msg,
             Err(e) => { 
-                println!("Invalid response: {:?} ,{msg}", e);
+                log::error!("Invalid response: {:?} ,{msg}", e);
                 return false; 
             }
         };
@@ -72,9 +72,6 @@ impl MarketDataSource for Bitstamp {
             Err(e) => { return Err(e.to_string()); }
         };
 
-        //println!("bitstamp JSON is: {:#?}\n", json_msg);
-
-        //let exchange = "Bitstamp";
         let mut order_book_snap = OrderBookSnap::new(self.info.name.to_string(), self.info.depth, &self.info.currency);
 
         for index in 0..self.info.depth {
@@ -88,8 +85,6 @@ impl MarketDataSource for Bitstamp {
                 amount: json_msg.data.asks[index].amount});
         }
         
-        //println!("Bitstamp snap: {:#?}", orderbook);
-        
         Ok(order_book_snap)
     }
     
@@ -97,7 +92,7 @@ impl MarketDataSource for Bitstamp {
         let url = match url::Url::parse(&self.info.address) {
             Ok(u) => u,
             Err(e) => {
-                println!("Failed to parse address for {}: {:?}", self.info.name, e);
+                log::error!("Failed to parse address for {}: {:?}", self.info.name, e);
                 return;
             }
         };
@@ -105,7 +100,7 @@ impl MarketDataSource for Bitstamp {
         let (ws_stream, _response) = match connect_async(url).await{
             Ok((s,r)) => (s, r),
             Err(e) => {
-                println!("Failed to connect to {}: {:?}", self.info.name, e);    
+                log::error!("Failed to connect to {}: {:?}", self.info.name, e);    
                 return;
             }
         };
@@ -118,9 +113,9 @@ impl MarketDataSource for Bitstamp {
                 "channel": format!("order_book_{}", self.info.currency)
             }
         });
-        println!("Bitstamp sub message: {}", msg.to_string());
+        log::info!("Bitstamp sub message: {}", msg.to_string());
         if let Err(e) = write.send(Message::Text(msg.to_string())).await {
-            println!("Failed to subscribe for {}: {:?}", self.info.name, e);
+            log::error!("Failed to subscribe for {}: {:?}", self.info.name, e);
             return;
         }
 
@@ -129,7 +124,7 @@ impl MarketDataSource for Bitstamp {
             let message = match msg {
                 Ok(m) => m,
                 Err(e) => {
-                    println!("{} recv msg err: {:#?}", self.info.name, e);
+                    log::error!("{} recv msg err: {:#?}", self.info.name, e);
                     continue;
                 }
             };
@@ -140,7 +135,7 @@ impl MarketDataSource for Bitstamp {
                         if self.is_successful(&msg) {
                             got_first_message = true;
                         } else {
-                            println!("Fail to subscribe to {}", self.info.name);
+                            log::error!("Fail to subscribe to {}", self.info.name);
                             return;
                         }
                     }
@@ -149,16 +144,16 @@ impl MarketDataSource for Bitstamp {
                         match self.normalize(&msg) {
                             Ok(orderbook) => { 
                                 if let Err(msg) = self.info.sender.send(orderbook).await {
-                                    println!("Failed to send orderbook snap: {msg}");
+                                    log::error!("Failed to send orderbook snap: {msg}");
                                 }; },
-                            Err(e) => { println!("Failed to normalize msg for {}: {:?}", self.info.name, e); },
+                            Err(e) => { log::error!("Failed to normalize msg for {}: {:?}", self.info.name, e); },
                         }
                     }
                 }
                 Message::Ping(_) | Message::Pong(_) | Message::Frame(_)=> {}
                 Message::Binary(_) => (),
                 Message::Close(e) => {
-                    println!("Disconnected {:?}", e);
+                    log::error!("Disconnected {:?}", e);
                     return;
                 }
             }
