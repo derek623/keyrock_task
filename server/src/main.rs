@@ -56,7 +56,7 @@ pub async fn main() -> Result<()> {
     });
 
     let (ag_ob_tx, ag_ob_rx) : (Sender<AggregatedOrderBook>, Receiver<AggregatedOrderBook>) = mpsc::channel(CHANNEL_SIZE);
-    let mut aggregator = Aggregator::new(ob_rx, ag_ob_tx, depth);
+    let mut aggregator = Aggregator::new(ob_rx, ag_ob_tx, 2 * depth);
     let aggregator_stream = tokio::spawn( async move {
         aggregator.run().await;
     });
