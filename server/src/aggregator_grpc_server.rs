@@ -1,18 +1,21 @@
-use crate::{orderbook::{Summary, orderbook_aggregator_server::{OrderbookAggregator, OrderbookAggregatorServer}, Empty}, aggregator::AggregatedOrderBook};
-use tokio::{sync::mpsc, sync::mpsc::Receiver};
+use crate::{orderbook::{Summary, orderbook_aggregator_server::{OrderbookAggregator}, Empty}, aggregator::AggregatedOrderBook};
+use tokio::sync::mpsc;
 use tonic::{Request, Response, Status};
 use tokio_stream::wrappers::ReceiverStream;
 use tokio::sync::Mutex;
 use std::sync::Arc;
+use crate::multi_receiver_channels::MultiReceiverChannel;
+
+const GRPC_BUFFER_SIZE: usize = 1000;
 
 pub struct OrderBookAggregatorService {
-    aob_rx_rc: Arc<Mutex<Receiver<AggregatedOrderBook>>>,
+    mpc: Arc<Mutex<MultiReceiverChannel<AggregatedOrderBook>>>,
     depth: usize,
 }
 
 impl OrderBookAggregatorService {
-    pub fn new(aob_rx_rc: Arc<Mutex<Receiver<AggregatedOrderBook>>>, depth: usize) -> OrderBookAggregatorService {
-        OrderBookAggregatorService { aob_rx_rc, depth }
+    pub fn new(mpc: Arc<Mutex<MultiReceiverChannel<AggregatedOrderBook>>>, depth: usize) -> OrderBookAggregatorService {
+        OrderBookAggregatorService { mpc, depth }
     }
 }
 
@@ -23,29 +26,29 @@ impl OrderbookAggregator for OrderBookAggregatorService {
 
     async fn book_summary(&self, _request: Request<Empty>) -> Result<Response<Self::BookSummaryStream>, Status> { 
         let (tx, rx) = mpsc::channel(100);
-        let aob_rx_rc = self.aob_rx_rc.clone();
+        let mpc = self.mpc.clone();
         //todo!() 
-        
+        let mut mpc = mpc.lock().await;
+        let mut mpc_rx = mpc.create_receiver(GRPC_BUFFER_SIZE);
         let depth = self.depth;
         tokio::spawn( async move {
-            let mut aob_rx = aob_rx_rc.lock().await;
-                while let Some(msg) = aob_rx.recv().await {
-                    //log::info!("OrderBook_Aggregator_Service got {:?}", msg);
-                        let summary = Summary {
-                            spread: msg.spread,
-                            bids: msg.order_book.bids[0..depth].to_vec(),
-                            asks: msg.order_book.asks[0..depth].to_vec(),
-                        };
-                        
-                        match tx.send(Ok(summary)).await {
-                            Ok(_) => {},
-                            Err(e) => { 
-                                log::error!("Fail to send summary: {:?}", e.to_string()); 
-                                break;
-                            }
+            while let Some(msg) = mpc_rx.recv().await {
+                    let summary = Summary {
+                        spread: msg.spread,
+                        bids: msg.order_book.bids[0..depth].to_vec(),
+                        asks: msg.order_book.asks[0..depth].to_vec(),
+                    };
+                    
+                    match tx.send(Ok(summary)).await {
+                        Ok(_) => {},
+                        Err(e) => { 
+                            log::error!("Fail to send summary: {:?}", e.to_string()); 
+                            drop(mpc_rx);
+                            break;
                         }
                     }
-                });
+                }
+            });
                 
         
 

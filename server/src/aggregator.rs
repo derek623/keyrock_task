@@ -1,8 +1,10 @@
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::Receiver;
 use std::collections::HashMap;
 use crate::marketdatasource::{OrderBook, OrderBookSnap};
-use crate::orderbook::Level;
+use crate::{orderbook::Level, multi_receiver_channels::MultiReceiverChannel};
 use std::cmp::Ordering;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[derive(Default, Debug, Clone)]
 pub struct AggregatedOrderBook {
@@ -18,15 +20,15 @@ impl AggregatedOrderBook {
 
 pub struct Aggregator {
     rx: Receiver<OrderBookSnap>,
-    tx: Sender<AggregatedOrderBook>,
+    mpc: Arc<Mutex<MultiReceiverChannel<AggregatedOrderBook>>>,
     currency_to_agg_orderbook_map: HashMap<String, AggregatedOrderBook>,
     max_depth: usize,
 
 }
 
 impl Aggregator {
-    pub fn new (rx: Receiver<OrderBookSnap> ,tx: Sender<AggregatedOrderBook> ,max_depth: usize) -> Aggregator {
-        Aggregator { rx, tx, currency_to_agg_orderbook_map: HashMap::new(), max_depth } 
+    pub fn new (rx: Receiver<OrderBookSnap> ,mpc: Arc<Mutex<MultiReceiverChannel<AggregatedOrderBook>>> ,max_depth: usize) -> Aggregator {
+        Aggregator { rx, mpc, currency_to_agg_orderbook_map: HashMap::new(), max_depth } 
     }
 
     fn merge_side<F>(mut updated_queue: Vec<Level>, merged_queue: &Vec<Level>, exchange: &str, depth: usize, cmp: F) -> Result<Vec<Level>, String>
@@ -132,12 +134,10 @@ impl Aggregator {
         while let Some(msg) = self.rx.recv().await {
             match self.merge(msg) {
                 Ok(agg_order_book) => { 
-                    match self.tx.send(agg_order_book).await {
-                        Ok(_) => {},
-                        Err(e) => { log::error!("Fail to send the following Aggreated order book to the grpc server: {:?}", e); },
-                    }
+                    let mut mpc = self.mpc.lock().await;
+                    mpc.send(agg_order_book).await;
                 },
-                Err(emsg) => { log::error!("Merging snapshot return error: {}", emsg); },
+                Err(e) => { log::error!("Merging snapshot return error: {}", e); },
             }
         }
     }

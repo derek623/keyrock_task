@@ -4,6 +4,7 @@ mod marketdatasource;
 mod aggregator;
 mod utility;
 mod aggregator_grpc_server;
+mod multi_receiver_channels;
 
 pub mod orderbook {
     tonic::include_proto!("orderbook");
@@ -24,6 +25,7 @@ use fast_log::plugin::file_split::RollingType;
 use fast_log::consts::LogSize;
 use fast_log::plugin::packer::LogPacker;
 use log::LevelFilter;
+use multi_receiver_channels::MultiReceiverChannel;
 
 const GRPC_SERVER_URL: &str = "[::1]:30253";
 
@@ -47,7 +49,6 @@ pub async fn main() -> Result<()> {
         return Ok(());
     };
 
-    //let (tx: Sender<order_book_snap::OrderBookSnap>, mut rx: Receiver<order_book_snap::OrderBookSnap>) = mpsc::channel(CHANNEL_SIZE);
     let (ob_tx, ob_rx) : (Sender<OrderBookSnap>, Receiver<OrderBookSnap>) = mpsc::channel(CHANNEL_SIZE);
     let ob_tx2 = ob_tx.clone();
 
@@ -67,14 +68,13 @@ pub async fn main() -> Result<()> {
         binance.run().await;
     });
 
-    let (ag_ob_tx, ag_ob_rx) : (Sender<AggregatedOrderBook>, Receiver<AggregatedOrderBook>) = mpsc::channel(CHANNEL_SIZE);
-    let mut aggregator = Aggregator::new(ob_rx, ag_ob_tx, 2 * depth);
+    let mrc = Arc::new(Mutex::new(MultiReceiverChannel::<AggregatedOrderBook>::new()));
+    let mut aggregator = Aggregator::new(ob_rx, mrc.clone(), 2 * depth);
     let aggregator_stream = tokio::spawn( async move {
         aggregator.run().await;
     });
     
-    let ag_ob_rx = Arc::new(Mutex::new(ag_ob_rx));
-    let server: OrderBookAggregatorService = OrderBookAggregatorService::new(ag_ob_rx.clone(), depth);
+    let server: OrderBookAggregatorService = OrderBookAggregatorService::new(mrc.clone(), depth);
     let order_aggregator_server = Server::builder()
         .add_service(orderbook::orderbook_aggregator_server::OrderbookAggregatorServer::new(server))
         .serve(GRPC_SERVER_URL.to_socket_addrs().unwrap().next().unwrap());
@@ -90,20 +90,6 @@ pub async fn main() -> Result<()> {
         _ = aggregator_stream => {},
         _ = order_aggregator_server => {}
     };
-    //bitstamp_stream.await?;
-    /*let bitstamp = Bitstamp::new("wss://ws.bitstamp.net");
-    let binance = Binance::new("wss://stream.binance.com:9443/ws/ethbtc@depth20@100ms");
-
-    let sources: Vec<Box<dyn MarketDataSource>> = Vec::new();
-    sources.push(Box::new(bitstamp));
-    sources.push(Box::new(binance));
-    for source in sources {
-        let stream = tokio::spawn( async move {
-            source.run().await;
-        });
-        stream.await?;
-    }*/
-
 
     Ok(())
 }
