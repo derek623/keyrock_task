@@ -99,18 +99,18 @@ impl Aggregator {
                     println!("No chance in bids!: {:?}, {:?}", agg_order_book.order_book.bids, new_bids);
                 }*/
 
-                agg_order_book.order_book.bids.clone_from(&result_bids);
-                agg_order_book.order_book.asks.clone_from(&result_asks);
+                agg_order_book.order_book.bids = result_bids;
+                agg_order_book.order_book.asks = result_asks;
 
                 agg_order_book
                 
             },
             Entry::Vacant(v) => { 
                 let mut order_book = order_book_snap.order_book; 
-                {
-                    let asks = &mut order_book.asks;
-                    asks.reserve((self.max_depth)- asks.len()); //the orderbook within the aggregatedOrderBook needs to keep a size of max_depth
-                }
+                
+                let asks = &mut order_book.asks;
+                asks.reserve((self.max_depth)- asks.len()); //the orderbook within the aggregatedOrderBook needs to keep a size of max_depth
+                
                 let bids = &mut order_book.bids;
                 bids.reserve((self.max_depth) - bids.len());
                 log::info!("Creating orderbook for {}: {:?}", order_book.currency, order_book);

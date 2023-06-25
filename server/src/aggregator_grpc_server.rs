@@ -22,9 +22,10 @@ impl OrderbookAggregator for OrderBookAggregatorService {
     type BookSummaryStream = ReceiverStream<Result<Summary, Status>>;
 
     async fn book_summary(&self, _request: Request<Empty>) -> Result<Response<Self::BookSummaryStream>, Status> { 
-        let (tx, rx) = mpsc::channel(4);
+        let (tx, rx) = mpsc::channel(100);
         let aob_rx_rc = self.aob_rx_rc.clone();
         //todo!() 
+        
         let depth = self.depth;
         tokio::spawn( async move {
             let mut aob_rx = aob_rx_rc.lock().await;
@@ -35,6 +36,7 @@ impl OrderbookAggregator for OrderBookAggregatorService {
                             bids: msg.order_book.bids[0..depth].to_vec(),
                             asks: msg.order_book.asks[0..depth].to_vec(),
                         };
+                        
                         match tx.send(Ok(summary)).await {
                             Ok(_) => {},
                             Err(e) => { 
