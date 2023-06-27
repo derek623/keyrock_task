@@ -29,7 +29,7 @@ Example:
 cargo run --release --bin client
 
 ------------------------------
-Components
+COMPONENTS
 ------------------------------
 
 **MarketDataSourceContainer:**
