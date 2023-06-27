@@ -8,7 +8,7 @@ There are 2 binaries in this project, the server and the client:
 
 To run the server, run the below command in the root folder
 
-cargo run --release --bin server currency <depth> <port>
+**cargo run --release --bin server currency \<depth\> \<port\>**
 
 currency - a compulsory argument
 depth - optional, the default value is 10 if not specified
@@ -21,7 +21,7 @@ cargo run --release --bin server ethbtc 10 30254
 
 To run the client, run the below command in the root folder
 
-cargo run --release --bin client <port>
+**cargo run --release --bin client \<port\>**
 
 port - optional, the default value is 30253 if not specified
 
