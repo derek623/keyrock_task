@@ -29,10 +29,11 @@ use log::LevelFilter;
 use multi_receiver_channels::MultiReceiverChannel;
 use marketDataSourceContainer::MarketDataSourceContainer;
 
-const GRPC_SERVER_URL: &str = "[::1]:30253";
+const GRPC_SERVER_URL: &str = "[::1]:";
 
 const CHANNEL_SIZE: usize = 10000;
 const DEFAULT_DEPTH: usize = 10;
+const GRPC_SERVER_DEFAULT_PORT: usize = 30253;
 
 #[tokio::main]
 pub async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -47,7 +48,7 @@ pub async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
-        println!("Missing arguments: Usage: server <currency> <depth>");
+        println!("Missing arguments: Usage: server currency <depth> <grpc_port>");
         return Ok(());
     };
 
@@ -59,6 +60,14 @@ pub async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         2 => DEFAULT_DEPTH,
         _ => { args[2].parse::<usize>().expect("Cannot get the depth from command line argument") }
     };
+
+    let grpc_port = match args.len() {
+        2 | 3 => { GRPC_SERVER_DEFAULT_PORT },
+        _ => { args[3].parse::<usize>().expect("Cannot get the grpc port from command line argument") }
+    };
+    
+    let mut grpc_url = GRPC_SERVER_URL.to_owned();
+    grpc_url.push_str(&grpc_port.to_string());
 
     let bitstamp = Bitstamp::new("wss://ws.bitstamp.net", &currency, depth, ob_tx, "bitstamp");
     let binance = Binance::new("wss://stream.binance.com:9443/ws/", &currency, depth, ob_tx2, "binance"); //ethbtc@depth10@100ms
@@ -74,11 +83,12 @@ pub async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     });
     
     let server: OrderBookAggregatorService = OrderBookAggregatorService::new(mrc.clone(), depth);
-
+    
     Server::builder()
         .add_service(orderbook::orderbook_aggregator_server::OrderbookAggregatorServer::new(server))
-        .serve(GRPC_SERVER_URL.parse().expect("Invalid socket address")).await?;
+        .serve(grpc_url.parse().expect("Invalid socket address")).await?;
 
+    
     aggregator_stream.await?;
 
     Ok(())

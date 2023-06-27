@@ -3,6 +3,7 @@
 use prettytable::Table;
 use std::io::{Write, StdoutLock};
 use orderbook::Summary;
+use std::env;
 
 pub mod orderbook {
     tonic::include_proto!("orderbook");
@@ -11,7 +12,8 @@ pub mod orderbook {
 use orderbook::{orderbook_aggregator_client, Empty};
 use tokio_stream::StreamExt;
 
-const GRPC_SERVER_URL: &str = "http://[::1]:30253";
+const GRPC_SERVER_URL: &str = "http://[::1]:";
+const GRPC_SERVER_DEFAULT_PORT: usize = 30253;
 
 fn clear(lock: &mut StdoutLock) {
     //let _ = write!(lock, "{esc}c", esc = 27 as char);
@@ -36,8 +38,17 @@ fn print_summary(lock: &mut StdoutLock, summary: &Summary) {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = env::args().collect();
+    let grpc_port = match args.len() {
+        1 => { GRPC_SERVER_DEFAULT_PORT },
+        _ => { args[1].parse::<usize>().expect("Cannot get the grpc port from command line argument") }
+    };
+    
+    let mut grpc_url = GRPC_SERVER_URL.to_owned();
+    grpc_url.push_str(&grpc_port.to_string());
+
     let mut client =
-        orderbook_aggregator_client::OrderbookAggregatorClient::connect(GRPC_SERVER_URL).await?;
+        orderbook_aggregator_client::OrderbookAggregatorClient::connect(grpc_url).await?;
 
     let mut stream = client.book_summary(Empty {}).await?.into_inner();
 

@@ -24,12 +24,10 @@ impl<T: Clone> MultiReceiverChannel<T> {
         while i < self.senders.len() {
             let sender = &self.senders[i];
             match sender.send(t.clone()).await {
-                Ok(_) => { println!("Sent to {}", i); i += 1; },
+                Ok(_) => { i += 1; },
                 Err(e) => { 
                     log::error!("MultiReceiverChannel failed to send {:?}", e.to_string()); 
                     self.senders.swap_remove(i);
-                    println!("Removed {}", i);
-
                 } 
             }
         };
