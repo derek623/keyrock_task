@@ -1,11 +1,12 @@
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use futures_util::StreamExt;
+use futures_util::{StreamExt, SinkExt};
 use crate::market_data_source::{MarketDataSourceInfo, MarketDataSource, OrderBookSnap};
 use crate::orderbook::Level;
 use async_trait::async_trait;
 use serde::{Deserialize};
 use tokio::sync::mpsc::Sender;
 use crate::utility::de_f64_or_string_as_f64;
+use serde_json::json;
 
 #[derive(Debug, Deserialize)]
 struct BinanceLevel {
@@ -16,12 +17,19 @@ struct BinanceLevel {
 }
 
 #[derive(Debug, Deserialize)]
-struct BinanceJson {
+struct BinanceData {
     bids: Vec<BinanceLevel>,
     asks: Vec<BinanceLevel>,
 }
+
+#[derive(Debug, Deserialize)]
+struct BinanceJson {
+    stream: String,
+    data: BinanceData,
+}
 pub struct Binance {
     info: MarketDataSourceInfo,
+    metadata: String,
 }
 
 impl Binance {
@@ -31,7 +39,9 @@ impl Binance {
             currency: currency.to_string(), 
             depth, 
             sender,
-            name: name.to_string() }
+            name: name.to_string(),
+             },
+             metadata: format!("@depth{}@100ms", depth.to_string())
         }
     }
 }
@@ -45,25 +55,30 @@ impl MarketDataSource for Binance {
             Err(e) => { return Err(e.to_string()); }
         };
 
-        let mut order_book_snap = OrderBookSnap::new(self.info.name.to_string(), self.info.depth, &self.info.currency);
+        let currency = json_msg.stream.trim_end_matches(&self.metadata);
+        let mut order_book_snap = OrderBookSnap::new(self.info.name.to_string(), self.info.depth, currency);
 
         for index in 0..self.info.depth {
             order_book_snap.order_book.add_bid(Level{
                 exchange: self.info.name.to_string(), 
-                price: json_msg.bids[index].price, 
-                amount: json_msg.bids[index].amount});
+                price: json_msg.data.bids[index].price, 
+                amount: json_msg.data.bids[index].amount});
             order_book_snap.order_book.add_ask(Level{
                 exchange: self.info.name.to_string(),
-                price: json_msg.asks[index].price, 
-                amount: json_msg.asks[index].amount});
+                price: json_msg.data.asks[index].price, 
+                amount: json_msg.data.asks[index].amount});
         }
         
         Ok(order_book_snap)
     }
 
     async fn run(&self) {
-
-        let final_address = format!("{}{}@depth{}@100ms", self.info.address, self.info.currency, self.info.depth.to_string());
+        let currency_vec: Vec<&str> = self.info.currency.split(',').collect();
+        //If not currency is specified, do not start the binance connection as it needs at least one currency in the url
+        if currency_vec.len() <= 0 {
+            return;
+        }        
+        let final_address = format!("{}{}{}", self.info.address, currency_vec[0], self.metadata);
 
         let url = match url::Url::parse(&final_address) {
             Ok(u) => u,
@@ -81,7 +96,24 @@ impl MarketDataSource for Binance {
             }
         };
     
-        let (write, mut read) = ws_stream.split();
+        let (mut write, mut read) = ws_stream.split();
+        //Subscribe to additional currency
+        for n in 1..currency_vec.len() {
+            let msg = json!({
+                "method": "SUBSCRIBE",
+                "params": [
+                    format!("{}@depth10@100ms", currency_vec[n])
+                ],
+                "id": 1
+            });
+
+            log::info!("Binance sub message: {}", msg.to_string());
+            
+            if let Err(e) = write.send(Message::Text(msg.to_string())).await {
+                log::error!("Failed to subscribe for {}: {:?}", self.info.name, e);
+                return;
+            }
+        }
       
         while let Some(msg) = read.next().await {
              let message = match msg {

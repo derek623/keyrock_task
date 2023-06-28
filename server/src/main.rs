@@ -33,6 +33,7 @@ const GRPC_SERVER_URL: &str = "[::1]:";
 
 const CHANNEL_SIZE: usize = 10000;
 const DEFAULT_DEPTH: usize = 10;
+const DEFAULT_CURRENCY: &str = "ethbtc";
 const GRPC_SERVER_DEFAULT_PORT: usize = 30253;
 
 #[tokio::main]
@@ -47,22 +48,20 @@ pub async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 2 {
-        println!("Missing arguments: Usage: server currency <depth> <grpc_port>");
-        return Ok(());
-    };
-
     let (ob_tx, ob_rx) : (Sender<OrderBookSnap>, Receiver<OrderBookSnap>) = mpsc::channel(CHANNEL_SIZE);
     let ob_tx2 = ob_tx.clone();
 
-    let currency = &args[1];
+    let currency = match args.len() {
+        1 => DEFAULT_CURRENCY,
+        _ => { &args[1] }
+    };
     let depth = match args.len() {
-        2 => DEFAULT_DEPTH,
+        1 | 2 => DEFAULT_DEPTH,
         _ => { args[2].parse::<usize>().expect("Cannot get the depth from command line argument") }
     };
 
     let grpc_port = match args.len() {
-        2 | 3 => { GRPC_SERVER_DEFAULT_PORT },
+        1 | 2 | 3 => { GRPC_SERVER_DEFAULT_PORT },
         _ => { args[3].parse::<usize>().expect("Cannot get the grpc port from command line argument") }
     };
     
@@ -70,10 +69,10 @@ pub async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     grpc_url.push_str(&grpc_port.to_string());
 
     let bitstamp = Bitstamp::new("wss://ws.bitstamp.net", &currency, depth, ob_tx, "bitstamp");
-    let binance = Binance::new("wss://stream.binance.com:9443/ws/", &currency, depth, ob_tx2, "binance"); //ethbtc@depth10@100ms
+    let binance = Binance::new("wss://stream.binance.com:9443/stream?streams=", &currency, depth, ob_tx2, "binance"); //ethbtc@depth10@100ms
     let mut mds_container = MarketDataSourceContainer::new();
     mds_container.add(Box::new(bitstamp));
-    mds_container.add(Box::new(binance));    
+    mds_container.add(Box::new(binance));
     mds_container.wait_resources().await;
 
     let mrc = Arc::new(Mutex::new(MultiReceiverChannel::<AggregatedOrderBook>::new()));
