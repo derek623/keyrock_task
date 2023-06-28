@@ -5,7 +5,7 @@ mod aggregator;
 mod utility;
 mod aggregator_grpc_server;
 mod multi_receiver_channels;
-mod marketDataSourceContainer;
+mod market_data_source_container;
 
 pub mod orderbook {
     tonic::include_proto!("orderbook");
@@ -27,7 +27,7 @@ use fast_log::consts::LogSize;
 use fast_log::plugin::packer::LogPacker;
 use log::LevelFilter;
 use multi_receiver_channels::MultiReceiverChannel;
-use marketDataSourceContainer::MarketDataSourceContainer;
+use market_data_source_container::MarketDataSourceContainer;
 
 const GRPC_SERVER_URL: &str = "[::1]:";
 
