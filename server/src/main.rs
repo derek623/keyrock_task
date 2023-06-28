@@ -1,6 +1,6 @@
 mod bitstamp;
 mod binance;
-mod marketdatasource;
+mod market_data_source;
 mod aggregator;
 mod utility;
 mod aggregator_grpc_server;
@@ -14,7 +14,7 @@ pub mod orderbook {
 use tokio::{sync::mpsc, sync::mpsc::Receiver, sync::mpsc::Sender};
 use bitstamp::Bitstamp;
 use binance::Binance;
-use marketdatasource::OrderBookSnap;
+use market_data_source::OrderBookSnap;
 use aggregator::{Aggregator, AggregatedOrderBook};
 use aggregator_grpc_server::OrderBookAggregatorService;
 use tonic::transport::Server;
