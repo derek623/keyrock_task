@@ -12,7 +12,7 @@ use crate::orderbook;
 
 pub const DEFAULT_DEPTH: usize = 10;
 
-#[derive(VariantCount, Debug, FromPrimitive, Copy, Clone)]
+#[derive(VariantCount, Debug, FromPrimitive, Copy, Clone, PartialEq)]
 pub enum Exchange {
     Binance = 0,
     Bitstamp = 1,
@@ -40,7 +40,7 @@ impl OrderBook {
     }
 }
 
-#[derive(Debug, Deserialize, Copy, Clone)]
+#[derive(Debug, Deserialize, Copy, Clone, PartialEq)]
 pub struct MarketDatSourceLevel {
     #[serde(deserialize_with  = "de_f64_or_string_as_f64")]
     pub price: f64,
@@ -61,14 +61,6 @@ pub struct MarketDataSourceData {
     #[serde(deserialize_with  = "deserialie_vector")]
     pub asks: ArrayVec<MarketDatSourceLevel, DEFAULT_DEPTH>,
 }
-
-/*struct WrapperVector<T>(Vec<T>);
-
-impl<T> Into<Vec<T>> for WrapperVector<T> {
-    fn into(self) -> Vec<T> {
-        self.0
-    }
-}*/
 
 fn deserialie_vector<'de, D>(deserializer: D) -> Result<ArrayVec<MarketDatSourceLevel, DEFAULT_DEPTH>, D::Error>
 where

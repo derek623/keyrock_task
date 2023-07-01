@@ -46,7 +46,7 @@ Struct that implements the MarketDataSource trait, responsible for connecting to
 
 **Aggregator:**
 
-Receive order book updates from market data sources, and aggregate the updates into one single merge order book per currency. It has an array that stores the latest orderbook of each exchange. It does the merge by putting the top bid/ask of each exchange into an vector, find out the biggest/smallest, then pop and put the value into the result array. Afterwards, it put the next bid/ask of the same exchange and restart the whole process. It repeats the same process until the resulting Arrayvec is full (10 entries)  . Finally, it sends the merged order book to the channel which is connected to the grpc server.
+Receive order book updates from market data sources, and aggregate the updates into one single merge order book per currency. It has an array that stores the latest orderbook of each exchange. It does the merge by putting the top bid/ask of each exchange into a min-max-heap, find out the biggest/smallest with a customized PartialEq trait, then pop and put the value into the result array. Afterwards, it put the next bid/ask of the same exchange and restart the whole process. It repeats the same process until the resulting Arrayvec is full (10 entries). Finally, it sends the merged order book to the channel which is connected to the grpc server.
 
 **GRPC server:**
 
@@ -65,10 +65,8 @@ Log file is being written to \<basedir\>/target/logs. It rotates every 50 MB and
 ------------------------------
 POSSIBLE IMPROVEMENTS
 ------------------------------
-1) Rather than each market data source having access to the channel that is connected to the aggregator, each market data source should have a reference to the market data container and the channel should reside in the market data source container.
-2) If server subscribes to multiple currencies, all of the updates will be sent to client. Could enhance the grpc proto file to add a filter function so the server will know
-which currency update to filter in for such client.
 
+- The server only support one currency. I thought of allowing it to support multiple currency. However, if we connect to more exchange, then supporting multiple currencies could be an issue as the load of the server maybe too much. Another solution is to deploy an instance per currency. However, we can't tell for sure which is a better choice until we can do actual measurement. Therefore, I go with the one currency solution.
 
 
 

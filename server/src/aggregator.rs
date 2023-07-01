@@ -7,11 +7,82 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::DEFAULT_DEPTH;
 use arrayvec::ArrayVec;
+use min_max_heap::MinMaxHeap;
 
-struct MergeEntry<'a> {
+#[derive(Debug, PartialEq)]
+struct BidMergeEntry<'a> {
     level: &'a MarketDatSourceLevel,
     exchange: Exchange
 }
+
+impl Eq for BidMergeEntry<'_> {}
+
+impl PartialOrd for BidMergeEntry<'_> {
+    fn partial_cmp(&self, other: &BidMergeEntry) -> Option<Ordering> {
+        let c = match self.level.price.partial_cmp(&other.level.price) {
+            Some(c) => c,
+            None => { return None; }
+        };
+        if c == Ordering::Equal {
+            let c = match self.level.amount.partial_cmp(&other.level.amount) {
+                Some(c) => c,
+                None => { return None; }
+            };
+            Some(c)
+        } else {
+            Some(c)
+        }
+    }
+}
+
+impl Ord for BidMergeEntry<'_> {
+    fn cmp(&self, other: &BidMergeEntry) -> Ordering {
+         let c = self.level.price.total_cmp(&other.level.price);
+            if c == Ordering::Equal {
+                self.level.amount.total_cmp(&other.level.amount)
+            } else {
+                c
+            }
+        }
+}
+
+#[derive(Debug, PartialEq)]
+struct AskMergeEntry<'a> {
+    level: &'a MarketDatSourceLevel,
+    exchange: Exchange
+}
+
+impl Eq for AskMergeEntry<'_> {}
+
+impl PartialOrd for AskMergeEntry<'_> {
+    fn partial_cmp(&self, other: &AskMergeEntry) -> Option<Ordering> {
+        let c = match self.level.price.partial_cmp(&other.level.price) {
+            Some(c) => c,
+            None => { return None; }
+        };
+        if c == Ordering::Equal {
+            let c = match self.level.amount.partial_cmp(&other.level.amount) {
+                Some(c) => c,
+                None => { return None; }
+            };
+            Some(c.reverse())
+        } else {
+            Some(c)
+        }
+    }
+}
+
+impl Ord for AskMergeEntry<'_> {
+    fn cmp(&self, other: &AskMergeEntry) -> Ordering {
+         let c = self.level.price.total_cmp(&other.level.price);
+            if c == Ordering::Equal {
+                self.level.amount.total_cmp(&other.level.amount).reverse()                    
+            } else {
+                c
+            }
+        }
+}
+
 pub struct Aggregator {
     rx: Receiver<OrderBookSnap>,
     mpc: Arc<Mutex<MultiReceiverChannel<Summary>>>,
@@ -25,8 +96,8 @@ impl Aggregator {
 
     //This merge algorithm assumes that each exchange's bids are in the correct order and has the same depth
     fn merge_bid(exchange_orderbook_array: &[OrderBook]) -> Result<ArrayVec<Level, DEFAULT_DEPTH>, String> {
-        //declare a vec with size = number of exchanges
-        let mut value_vec = Vec::<MergeEntry>::with_capacity(Exchange::VARIANT_COUNT);
+        //a min_max_heap for picking the best level
+        let mut min_max_heap = MinMaxHeap::<BidMergeEntry>::new();
         // A vector that keeps track of the index of the next element in each exchange        
         let mut exchange_index_vec: [usize; Exchange::VARIANT_COUNT] = [0; Exchange::VARIANT_COUNT];
         //The result arrayVec
@@ -37,7 +108,7 @@ impl Aggregator {
             if !book.bids.is_empty() {
                 match num::FromPrimitive::from_usize(index) {
                     Some(exchange) => {
-                        value_vec.push(MergeEntry{level: &book.bids[0], exchange});
+                        min_max_heap.push(BidMergeEntry{level: &book.bids[0], exchange});
                         //Increment the index as the first element has been pushed into the value_vec
                         exchange_index_vec[index] += 1;
                     },
@@ -46,21 +117,17 @@ impl Aggregator {
             }
         }        
         
-        if value_vec.is_empty() {
+        if min_max_heap.is_empty() {
             return Ok(result);
         }
-
+        
         //Sort, take the first entry, and then put the next one into the vector. Repeat until result is full
-        while !result.is_full() {
-            //sort the vector
-            value_vec.sort_unstable_by(|l1, l2| {
-                if l2.level.price > l1.level.price || (l2.level.price == l1.level.price && l2.level.amount > l1.level.amount){
-                    Ordering::Greater
-                } else {
-                    Ordering::Less
-                }});
+        while !result.is_full() {            
             //get the first item and push to result
-            let first_item = value_vec.swap_remove(0);        
+            let first_item = match min_max_heap.pop_max() {
+                Some(i) => i,
+                None => { return Err("Fail to merge bid depth".to_string()); }
+            };
             result.push(first_item.level.to_orderbook_level(first_item.exchange.to_string()));
             //push the next entry from the respective exchange into value_vec.
             let first_item_exchange_index = first_item.exchange as usize;
@@ -68,9 +135,9 @@ impl Aggregator {
                 break;
             }
 
-            let next_item = MergeEntry { level: &exchange_orderbook_array[first_item_exchange_index].bids[exchange_index_vec[first_item_exchange_index]],
+            let next_item = BidMergeEntry { level: &exchange_orderbook_array[first_item_exchange_index].bids[exchange_index_vec[first_item_exchange_index]],
                 exchange: first_item.exchange };
-            value_vec.push(next_item);
+            min_max_heap.push(next_item);
             //update the index of the respective exchange
             exchange_index_vec[first_item_exchange_index] += 1;
         }
@@ -80,8 +147,8 @@ impl Aggregator {
 
     //This merge algorithm assumes that each exchange's asks are in the correct order and has the same depth
     fn merge_ask(exchange_orderbook_array: &[OrderBook]) -> Result<ArrayVec<Level, DEFAULT_DEPTH>, String> {
-        //declare a vec with size = number of exchanges
-        let mut value_vec = Vec::<MergeEntry>::with_capacity(Exchange::VARIANT_COUNT);
+        //Use a min max heap for picking the best entry
+        let mut min_max_heap = MinMaxHeap::<AskMergeEntry>::new();
         // A vector that keeps track of the index of the next element in each exchange        
         let mut exchange_index_vec: [usize; Exchange::VARIANT_COUNT] = [0; Exchange::VARIANT_COUNT];
         //The result arrayVec
@@ -92,7 +159,8 @@ impl Aggregator {
             if !book.asks.is_empty() {
                 match num::FromPrimitive::from_usize(index) {
                     Some(exchange) => {
-                        value_vec.push(MergeEntry{level: &book.asks[0], exchange});
+                        //value_vec.push(MergeEntry{level: &book.asks[0], exchange});
+                        min_max_heap.push(AskMergeEntry{level: &book.asks[0], exchange});
                         //Increment the index as the first element has been pushed into the value_vec
                         exchange_index_vec[index] += 1;
                     },
@@ -101,22 +169,17 @@ impl Aggregator {
             }
         }        
         
-        if value_vec.is_empty() {
+        if min_max_heap.is_empty() {
             return Ok(result);
         }
 
         //Sort, take the first entry, and then pust the next one into the vector. Repeat until result is full
         while !result.is_full() {
-            //sort the vector
-            value_vec.sort_unstable_by(|l1, l2| {
-                if l1.level.price < l2.level.price || (l2.level.price == l1.level.price && l1.level.amount > l2.level.amount){
-                    Ordering::Less
-                } else {
-                    Ordering::Greater
-                }
-            });
             //get the first item and push to result
-            let first_item = value_vec.swap_remove(0);        
+            let first_item = match min_max_heap.pop_min() {
+                Some(i) => i,
+                None => { return Err("Fail to merge ask depth".to_string()); }
+            };
             result.push(first_item.level.to_orderbook_level(first_item.exchange.to_string()));
             //push the next entry from the respective exchange into value_vec.
             let first_item_exchange_index = first_item.exchange as usize;
@@ -124,9 +187,9 @@ impl Aggregator {
                 break;
             }
 
-            let next_item = MergeEntry { level: &exchange_orderbook_array[first_item_exchange_index].asks[exchange_index_vec[first_item_exchange_index]],
+            let next_item = AskMergeEntry { level: &exchange_orderbook_array[first_item_exchange_index].asks[exchange_index_vec[first_item_exchange_index]],
                 exchange: first_item.exchange };
-            value_vec.push(next_item);
+            min_max_heap.push(next_item);
             //update the index of the respective exchange
             exchange_index_vec[first_item_exchange_index] += 1;
         }
