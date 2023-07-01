@@ -243,9 +243,49 @@ impl Aggregator {
 
 mod test {
     use super::*;
+    //Test the BidMergeEntry PartialEq
+    #[test]
+    fn test_bid_merge_entry() {
+        let mut vec = Vec::new();
+        vec.push(BidMergeEntry{level: &MarketDatSourceLevel { price: 1.0, amount: 1.0 }, exchange: Exchange::Binance});
+        vec.push(BidMergeEntry{level: &MarketDatSourceLevel { price: 2.0, amount: 1.0 }, exchange: Exchange::Binance});
+        vec.push(BidMergeEntry{level: &MarketDatSourceLevel { price: 3.0, amount: 1.0 }, exchange: Exchange::Binance});
+        vec.push(BidMergeEntry{level: &MarketDatSourceLevel { price: 2.0, amount: 2.0 }, exchange: Exchange::Binance});
+        vec.push(BidMergeEntry{level: &MarketDatSourceLevel { price: 1.0, amount: 2.0 }, exchange: Exchange::Binance});
+        vec.sort();
+        let mut result = Vec::new();
+        result.push(BidMergeEntry{level: &MarketDatSourceLevel { price: 1.0, amount: 1.0 }, exchange: Exchange::Binance});
+        result.push(BidMergeEntry{level: &MarketDatSourceLevel { price: 1.0, amount: 2.0 }, exchange: Exchange::Binance});
+        result.push(BidMergeEntry{level: &MarketDatSourceLevel { price: 2.0, amount: 1.0 }, exchange: Exchange::Binance});
+        result.push(BidMergeEntry{level: &MarketDatSourceLevel { price: 2.0, amount: 2.0 }, exchange: Exchange::Binance});
+        result.push(BidMergeEntry{level: &MarketDatSourceLevel { price: 3.0, amount: 1.0 }, exchange: Exchange::Binance});
 
+        assert_eq!(vec, result);
+    }
+
+     //Test the AskMergeEntry PartialEq
+     #[test]
+     fn test_ask_merge_entry() {
+         let mut vec = Vec::new();
+         vec.push(AskMergeEntry{level: &MarketDatSourceLevel { price: 1.0, amount: 1.0 }, exchange: Exchange::Binance});
+         vec.push(AskMergeEntry{level: &MarketDatSourceLevel { price: 2.0, amount: 1.0 }, exchange: Exchange::Binance});
+         vec.push(AskMergeEntry{level: &MarketDatSourceLevel { price: 3.0, amount: 1.0 }, exchange: Exchange::Binance});
+         vec.push(AskMergeEntry{level: &MarketDatSourceLevel { price: 2.0, amount: 2.0 }, exchange: Exchange::Binance});
+         vec.push(AskMergeEntry{level: &MarketDatSourceLevel { price: 1.0, amount: 2.0 }, exchange: Exchange::Binance});
+         vec.sort();
+         let mut result = Vec::new();
+         result.push(AskMergeEntry{level: &MarketDatSourceLevel { price: 1.0, amount: 2.0 }, exchange: Exchange::Binance});
+         result.push(AskMergeEntry{level: &MarketDatSourceLevel { price: 1.0, amount: 1.0 }, exchange: Exchange::Binance});
+         result.push(AskMergeEntry{level: &MarketDatSourceLevel { price: 2.0, amount: 2.0 }, exchange: Exchange::Binance});
+         result.push(AskMergeEntry{level: &MarketDatSourceLevel { price: 2.0, amount: 1.0 }, exchange: Exchange::Binance});
+         result.push(AskMergeEntry{level: &MarketDatSourceLevel { price: 3.0, amount: 1.0 }, exchange: Exchange::Binance});
+ 
+         assert_eq!(vec, result);
+     }
+
+    //Test the aggregator merge logic
     const INVALID_SIZE: usize = Exchange::VARIANT_COUNT + 1;
-
+    
     #[test]
     fn test_merge_bid_invalid_exchange_size_1() {         
         //Number of exchange is more than defined in the exchange enum, but empty orderbook for each exchange        
