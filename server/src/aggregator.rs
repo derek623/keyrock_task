@@ -9,7 +9,7 @@ use crate::DEFAULT_DEPTH;
 use arrayvec::ArrayVec;
 
 struct MergeEntry<'a> {
-    level: &'a Level,
+    level: &'a MarketDatSourceLevel,
     exchange: Exchange
 }
 pub struct Aggregator {
@@ -31,15 +31,15 @@ impl Aggregator {
         let mut exchange_index_vec: [usize; Exchange::VARIANT_COUNT] = [0; Exchange::VARIANT_COUNT];
         //The result arrayVec
         let mut result = ArrayVec::<Level, DEFAULT_DEPTH>::new();
-
+        
         //Initially put the first entry of each exchange into the array
         for (index, book) in exchange_orderbook_array.iter().enumerate() {
             if !book.bids.is_empty() {
                 match num::FromPrimitive::from_usize(index) {
                     Some(exchange) => {
                         value_vec.push(MergeEntry{level: &book.bids[0], exchange});
-                        //initially the next element is index 1 as index 0 has already been pushed in
-                        exchange_index_vec[index] = 1;
+                        //Increment the index as the first element has been pushed into the value_vec
+                        exchange_index_vec[index] += 1;
                     },
                     None => { return Err("Cannot get exchange enum from index".to_string()); }
                 }
@@ -57,7 +57,7 @@ impl Aggregator {
                 }});
             //get the first item and push to result
             let first_item = value_vec.swap_remove(0);        
-            result.push(first_item.level.clone());
+            result.push(Level {price: first_item.level.price, amount: first_item.level.amount, exchange: first_item.exchange.to_string()});
             //push the next entry from the respective exchange into value_vec.
             let first_item_exchange_index = first_item.exchange as usize;
             if exchange_index_vec[first_item_exchange_index] >= exchange_orderbook_array[first_item_exchange_index].bids.len() {
@@ -70,7 +70,7 @@ impl Aggregator {
             //update the index of the respective exchange
             exchange_index_vec[first_item_exchange_index] += 1;
         }
-
+        
         Ok(result)
     }
 
@@ -89,8 +89,8 @@ impl Aggregator {
                 match num::FromPrimitive::from_usize(index) {
                     Some(exchange) => {
                         value_vec.push(MergeEntry{level: &book.asks[0], exchange});
-                        //initially the next element is index 1 as index 0 has already been pushed in
-                        exchange_index_vec[index] = 1;
+                        //Increment the index as the first element has been pushed into the value_vec
+                        exchange_index_vec[index] += 1;
                     },
                     None => { return Err("Cannot get exchange enum from index".to_string()); }
                 }
@@ -109,7 +109,7 @@ impl Aggregator {
             });
             //get the first item and push to result
             let first_item = value_vec.swap_remove(0);        
-            result.push(first_item.level.clone());
+            result.push(Level {price: first_item.level.price, amount: first_item.level.amount, exchange: first_item.exchange.to_string()});
             //push the next entry from the respective exchange into value_vec.
             let first_item_exchange_index = first_item.exchange as usize;
             if exchange_index_vec[first_item_exchange_index] >= exchange_orderbook_array[first_item_exchange_index].asks.len() {
@@ -126,33 +126,32 @@ impl Aggregator {
         Ok(result)
     }
 
-    fn merge(&mut self, order_book_snap: OrderBookSnap) -> Result<OrderBook, String> {
-        //First update the exchange image in the exchange_orderbook_array
-        
+    fn merge(&mut self, order_book_snap: OrderBookSnap) -> Result<(Vec<Level>, Vec<Level>), String> {
+        //First update the exchange image in the exchange_orderbook_array        
         let order_book = &mut self.exchange_orderbook_array[order_book_snap.exchange as usize];        
         order_book.bids = order_book_snap.order_book.bids;        
         order_book.asks = order_book_snap.order_book.asks;        
                 
-        let mut result = OrderBook::new();
-        result.bids = match Aggregator::merge_bid(&self.exchange_orderbook_array) {
-            Ok(bids) => bids,
+        //let mut result = OrderBook::new();
+        let bids = match Aggregator::merge_bid(&self.exchange_orderbook_array) {
+            Ok(bids) => bids.to_vec(),
             Err(s) => { return Err(s); } 
         };
-        result.asks = match Aggregator::merge_ask(&self.exchange_orderbook_array) {
-            Ok(asks) => asks,
+        
+        let asks = match Aggregator::merge_ask(&self.exchange_orderbook_array) {
+            Ok(asks) => asks.to_vec(),
             Err(s) => { return Err(s); }
         };
-        Ok(result)
+        Ok((bids, asks))
     }
 
-    pub fn merge_and_gen_summary(&mut self, order_book_snap: OrderBookSnap) -> Result<Summary, String> {
-        let exchange = order_book_snap.exchange.clone();
-        let order_book: OrderBook = match self.merge(order_book_snap) {
-            Ok(book) => book,
+    pub fn merge_and_gen_summary(&mut self, order_book_snap: OrderBookSnap) -> Result<Summary, String> {        
+        let bid_ask_depth = match self.merge(order_book_snap) {
+            Ok(depth) => depth,
             Err(e) => { return Err(e); },
         };
-        let spread = order_book.asks[0].price - order_book.bids[0].price;        
-        let summary = Summary{spread, bids: order_book.bids.to_vec(), asks: order_book.asks.to_vec()};
+        let spread = bid_ask_depth.1[0].price - bid_ask_depth.0[0].price;        
+        let summary = Summary{spread, bids: bid_ask_depth.0, asks: bid_ask_depth.1};
         log::info!("{:?}", summary);
         Ok(summary)
     }

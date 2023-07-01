@@ -27,21 +27,21 @@ impl fmt::Display for Exchange {
 
 #[derive(Debug, Default, Clone)]
 pub struct OrderBook {
-    pub bids: ArrayVec<Level, DEFAULT_DEPTH>,
-    pub asks: ArrayVec<Level, DEFAULT_DEPTH>,
+    pub bids: ArrayVec<MarketDatSourceLevel, DEFAULT_DEPTH>,
+    pub asks: ArrayVec<MarketDatSourceLevel, DEFAULT_DEPTH>,
 }
 
 impl OrderBook {
 
     pub fn new() -> OrderBook{
-        OrderBook {bids: ArrayVec::<Level, DEFAULT_DEPTH>::new(), asks: ArrayVec::<Level, DEFAULT_DEPTH>::new()}
+        OrderBook {bids: ArrayVec::<MarketDatSourceLevel, DEFAULT_DEPTH>::new(), asks: ArrayVec::<MarketDatSourceLevel, DEFAULT_DEPTH>::new()}
     }
 
-    pub fn add_bid(&mut self, level: Level)
+    pub fn add_bid(&mut self, level: MarketDatSourceLevel)
     {
         self.bids.push(level);
     }
-    pub fn add_ask(&mut self, level: Level)
+    pub fn add_ask(&mut self, level: MarketDatSourceLevel)
     {
         self.asks.push(level);
     }

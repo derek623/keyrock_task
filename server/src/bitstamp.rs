@@ -61,18 +61,8 @@ impl MarketDataSource for Bitstamp {
             return Err("Receive depth for incorrect currency".to_string());
         }
         let mut order_book_snap = OrderBookSnap::new(Exchange::Bitstamp);
-        for index in 0..json_msg.data.bids.len() {
-            order_book_snap.order_book.add_bid(Level{
-                exchange: self.info.name.to_string(), 
-                price: json_msg.data.bids[index].price, 
-                amount: json_msg.data.bids[index].amount});
-        };
-        for index in 0..json_msg.data.asks.len() {
-            order_book_snap.order_book.add_ask(Level{
-                exchange: self.info.name.to_string(), 
-                price: json_msg.data.asks[index].price, 
-                amount: json_msg.data.asks[index].amount});
-        };
+        order_book_snap.order_book.bids = json_msg.data.bids;
+        order_book_snap.order_book.asks = json_msg.data.asks;
         
         Ok(order_book_snap)
     }
