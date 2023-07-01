@@ -50,7 +50,7 @@ impl Aggregator {
             return Ok(result);
         }
 
-        //Sort, take the first entry, and then pust the next one into the vector. Repeat until result is full
+        //Sort, take the first entry, and then put the next one into the vector. Repeat until result is full
         while !result.is_full() {
             //sort the vector
             value_vec.sort_unstable_by(|l1, l2| {
@@ -286,4 +286,106 @@ mod test {
         
         assert_eq!(Aggregator::merge_bid(&exchange_orderbook_array).expect("Error"), expected_result);            
     }    
+
+    #[test]
+    fn test_merge_ask_invalid_exchange_size_1() {         
+        //Number of exchange is more than defined in the exchange enum, but empty orderbook for each exchange        
+        let exchange_orderbook_array: [OrderBook; INVALID_SIZE] = std::array::from_fn(|_|             
+            OrderBook::new()
+        );        
+        assert_eq!(Aggregator::merge_ask(&exchange_orderbook_array).expect("Error").len(), 0);
+    }
+    #[test]
+    fn test_merge_ask_invalid_exchange_size_2() {         
+        //Number of exchange is more than defined in the exchange enum, add one level to each exchange
+        let mut exchange_orderbook_array: [OrderBook; INVALID_SIZE] = std::array::from_fn(|_|             
+            OrderBook::new()
+        );
+        for n in &mut exchange_orderbook_array {
+            n.asks.push(MarketDatSourceLevel {amount: 1.0, price: 1.0});
+        }
+        assert_eq!(if let Err(e) = Aggregator::merge_ask(&exchange_orderbook_array) {
+            e
+        } else { "".to_string() },
+         "Cannot get exchange enum from index".to_string());
+    }
+    #[test]
+    fn test_merge_ask_one_order_book() {
+        //Only one exchange has order book, others are empty
+        let mut exchange_orderbook_array: [OrderBook; Exchange::VARIANT_COUNT] = std::array::from_fn(|_|             
+            OrderBook::new()
+        );
+        let index = Exchange::Binance as usize;
+        //exchange_orderbook_array[index].bids.push(MarketDatSourceLevel {amount: 1.0, price: 1.0});
+        let mut expected_result = ArrayVec::<Level, DEFAULT_DEPTH>::new();
+
+        let mut best_price = 10.0;
+        let step = 0.1;
+        while !expected_result.is_full() {
+            exchange_orderbook_array[index].asks.push(MarketDatSourceLevel {amount: 1.0, price: best_price});
+            expected_result.push(Level{amount: 1.0, price: best_price, exchange: Exchange::Binance.to_string()});
+            assert_eq!(Aggregator::merge_ask(&exchange_orderbook_array).expect("Error"), expected_result);
+            best_price += step;
+        }
+    }
+    #[test]
+    fn test_merge_ask_multiple_order_book_1() {
+        //Same price but different amount, the entry with the higher amount will go first
+        let mut exchange_orderbook_array: [OrderBook; Exchange::VARIANT_COUNT] = std::array::from_fn(|_|             
+            OrderBook::new()
+        );
+        let binance_index = Exchange::Binance as usize;
+        let bitstamp_index = Exchange::Bitstamp as usize;
+        //exchange_orderbook_array[index].bids.push(MarketDatSourceLevel {amount: 1.0, price: 1.0});
+        let mut expected_result = ArrayVec::<Level, DEFAULT_DEPTH>::new();
+
+        let mut binance_best_price = 10.0;
+        let mut bitstamp_best_price = 10.0;
+        let step = 0.1;
+        for _ in 0..DEFAULT_DEPTH {
+            exchange_orderbook_array[binance_index].asks.push(MarketDatSourceLevel {amount: 2.0, price: binance_best_price});
+            exchange_orderbook_array[bitstamp_index].asks.push(MarketDatSourceLevel {amount: 1.0, price: bitstamp_best_price});            
+            binance_best_price += step;
+            bitstamp_best_price += step;
+        }
+
+        let mut index = 0;
+        while !expected_result.is_full() {
+            expected_result.push(exchange_orderbook_array[binance_index].asks[index].to_orderbook_level(Exchange::Binance.to_string()));
+            expected_result.push(exchange_orderbook_array[bitstamp_index].asks[index].to_orderbook_level(Exchange::Bitstamp.to_string()));
+            index += 1;
+        }
+        
+        assert_eq!(Aggregator::merge_ask(&exchange_orderbook_array).expect("Error"), expected_result);            
+    }
+    #[test]
+    fn test_merge_ask_multiple_order_book_2() {
+        //All with different price, higher price go first
+        let mut exchange_orderbook_array: [OrderBook; Exchange::VARIANT_COUNT] = std::array::from_fn(|_|             
+            OrderBook::new()
+        );
+        let binance_index = Exchange::Binance as usize;
+        let bitstamp_index = Exchange::Bitstamp as usize;
+        //exchange_orderbook_array[index].bids.push(MarketDatSourceLevel {amount: 1.0, price: 1.0});
+        let mut expected_result = ArrayVec::<Level, DEFAULT_DEPTH>::new();
+
+        let mut binance_best_price = 21.0;
+        let mut bitstamp_best_price = 20.0;
+        let step = 2.0;
+        for _ in 0..DEFAULT_DEPTH {
+            exchange_orderbook_array[binance_index].asks.push(MarketDatSourceLevel {amount: 1.0, price: binance_best_price});
+            exchange_orderbook_array[bitstamp_index].asks.push(MarketDatSourceLevel {amount: 1.0, price: bitstamp_best_price});            
+            binance_best_price += step;
+            bitstamp_best_price += step;
+        }
+
+        let mut index = 0;
+        while !expected_result.is_full() {
+            expected_result.push(exchange_orderbook_array[bitstamp_index].asks[index].to_orderbook_level(Exchange::Bitstamp.to_string()));
+            expected_result.push(exchange_orderbook_array[binance_index].asks[index].to_orderbook_level(Exchange::Binance.to_string()));            
+            index += 1;
+        }
+        
+        assert_eq!(Aggregator::merge_ask(&exchange_orderbook_array).expect("Error"), expected_result);            
+    }
 }
