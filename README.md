@@ -15,8 +15,11 @@ currency - optional, default value is ethbtc.
 port - optional, the default value is 30253 if not specified
 
 Example:
+
 cargo run --release --bin server
+
 cargo run --release --bin server ethbtc
+
 cargo run --release --bin server ethbtc 30254
 
 **2) Client**
@@ -28,7 +31,9 @@ To run the client, run the below command in the root folder
 port - optional, the default value is 30253 if not specified
 
 Example:
+
 cargo run --release --bin client
+
 cargo run --release --bin client 30254
 
 Multiple clients can be started.
