@@ -1,13 +1,13 @@
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use futures_util::{StreamExt, SinkExt};
-use crate::market_data_source::{MarketDataSourceInfo, MarketDataSource, OrderBookSnap};
+use crate::market_data_source::*;
 use crate::orderbook::Level;
 use async_trait::async_trait;
 use serde::{Deserialize};
 use tokio::sync::mpsc::Sender;
-use crate::utility::de_f64_or_string_as_f64;
 use serde_json::json;
 
+/*
 #[derive(Debug, Deserialize)]
 struct BinanceLevel {
     #[serde(deserialize_with  = "de_f64_or_string_as_f64")]
@@ -20,12 +20,12 @@ struct BinanceLevel {
 struct BinanceData {
     bids: Vec<BinanceLevel>,
     asks: Vec<BinanceLevel>,
-}
+}*/
 
 #[derive(Debug, Deserialize)]
 struct BinanceJson {
     stream: String,
-    data: BinanceData,
+    data: MarketDataSourceData,
 }
 pub struct Binance {
     info: MarketDataSourceInfo,
@@ -33,15 +33,14 @@ pub struct Binance {
 }
 
 impl Binance {
-    pub fn new(address: &str, currency: &str, depth: usize, sender: Sender<OrderBookSnap>, name: &str) -> impl MarketDataSource {
+    pub fn new(address: &str, currency: &str, sender: Sender<OrderBookSnap>, name: &str) -> impl MarketDataSource {
         Binance { info: MarketDataSourceInfo { 
             address: address.to_string(), 
             currency: currency.to_string(), 
-            depth, 
             sender,
             name: name.to_string(),
              },
-             metadata: format!("@depth{}@100ms", depth.to_string())
+             metadata: format!("@depth{}@100ms", DEFAULT_DEPTH.to_string())
         }
     }
 }
@@ -56,29 +55,28 @@ impl MarketDataSource for Binance {
         };
 
         let currency = json_msg.stream.trim_end_matches(&self.metadata);
-        let mut order_book_snap = OrderBookSnap::new(self.info.name.to_string(), self.info.depth, currency);
-
-        for index in 0..self.info.depth {
+        if currency != self.info.currency {
+            return Err("Receive depth for incorrect currency".to_string());
+        }
+        let mut order_book_snap = OrderBookSnap::new(Exchange::Binance);
+        for index in 0..json_msg.data.bids.len() {
             order_book_snap.order_book.add_bid(Level{
                 exchange: self.info.name.to_string(), 
                 price: json_msg.data.bids[index].price, 
                 amount: json_msg.data.bids[index].amount});
+        };
+        for index in 0..json_msg.data.asks.len() {
             order_book_snap.order_book.add_ask(Level{
-                exchange: self.info.name.to_string(),
+                exchange: self.info.name.to_string(), 
                 price: json_msg.data.asks[index].price, 
                 amount: json_msg.data.asks[index].amount});
-        }
+        };
         
         Ok(order_book_snap)
     }
 
-    async fn run(&self) {
-        let currency_vec: Vec<&str> = self.info.currency.split(',').collect();
-        //If not currency is specified, do not start the binance connection as it needs at least one currency in the url
-        if currency_vec.len() <= 0 {
-            return;
-        }        
-        let final_address = format!("{}{}{}", self.info.address, currency_vec[0], self.metadata);
+    async fn run(&self) {        
+        let final_address = format!("{}{}{}", self.info.address, self.info.currency, self.metadata);
 
         let url = match url::Url::parse(&final_address) {
             Ok(u) => u,
@@ -96,24 +94,7 @@ impl MarketDataSource for Binance {
             }
         };
     
-        let (mut write, mut read) = ws_stream.split();
-        //Subscribe to additional currency
-        for n in 1..currency_vec.len() {
-            let msg = json!({
-                "method": "SUBSCRIBE",
-                "params": [
-                    format!("{}@depth10@100ms", currency_vec[n])
-                ],
-                "id": 1
-            });
-
-            log::info!("Binance sub message: {}", msg.to_string());
-            
-            if let Err(e) = write.send(Message::Text(msg.to_string())).await {
-                log::error!("Failed to subscribe for {}: {:?}", self.info.name, e);
-                return;
-            }
-        }
+        let (mut write, mut read) = ws_stream.split();        
       
         while let Some(msg) = read.next().await {
              let message = match msg {

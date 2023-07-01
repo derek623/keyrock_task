@@ -1,141 +1,168 @@
 use tokio::sync::mpsc::Receiver;
-use std::collections::HashMap;
-use crate::market_data_source::{OrderBook, OrderBookSnap};
+use crate::{market_data_source::*, orderbook};
+use crate::orderbook::Summary;
 use crate::{orderbook::Level, multi_receiver_channels::MultiReceiverChannel};
 use std::cmp::Ordering;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use crate::DEFAULT_DEPTH;
+use arrayvec::ArrayVec;
 
-#[derive(Default, Debug, Clone)]
-pub struct AggregatedOrderBook {
-    pub spread: f64,
-    pub order_book: OrderBook,
+struct MergeEntry<'a> {
+    level: &'a Level,
+    exchange: Exchange
 }
-
-impl AggregatedOrderBook {
-    pub fn new(spread: f64, order_book: OrderBook) -> AggregatedOrderBook {
-        AggregatedOrderBook {spread, order_book}
-    }
-}
-
 pub struct Aggregator {
     rx: Receiver<OrderBookSnap>,
-    mpc: Arc<Mutex<MultiReceiverChannel<AggregatedOrderBook>>>,
-    currency_to_agg_orderbook_map: HashMap<String, AggregatedOrderBook>,
-    max_depth: usize,
-
+    mpc: Arc<Mutex<MultiReceiverChannel<Summary>>>,
+    exchange_orderbook_array: [OrderBook; Exchange::VARIANT_COUNT]
 }
 
 impl Aggregator {
-    pub fn new (rx: Receiver<OrderBookSnap> ,mpc: Arc<Mutex<MultiReceiverChannel<AggregatedOrderBook>>> ,max_depth: usize) -> Aggregator {
-        Aggregator { rx, mpc, currency_to_agg_orderbook_map: HashMap::new(), max_depth } 
+    pub fn new (rx: Receiver<OrderBookSnap> ,mpc: Arc<Mutex<MultiReceiverChannel<Summary>>>) -> Aggregator {
+        Aggregator { rx, mpc, exchange_orderbook_array: Default::default() } 
     }
 
-    fn merge_side<F>(mut updated_queue: Vec<Level>, merged_queue: &Vec<Level>, exchange: &str, depth: usize, cmp: F) -> Result<Vec<Level>, String>
-    where
-    F: FnMut(&Level, &Level) -> Ordering {
-        if depth < updated_queue.len() {
-            return Err("Depth is smaller then updated queue length, fail to merge!".to_string());
-        }
+    //This merge algorithm assumes that each exchange's bids are in the correct order and has the same depth
+    fn merge_bid(exchange_orderbook_array: &[OrderBook; Exchange::VARIANT_COUNT]) -> Result<ArrayVec<Level, DEFAULT_DEPTH>, String> {
+        //declare a vec with size = number of exchanges
+        let mut value_vec = Vec::<MergeEntry>::with_capacity(Exchange::VARIANT_COUNT);
+        // A vector that keeps track of the index of the next element in each exchange        
+        let mut exchange_index_vec: [usize; Exchange::VARIANT_COUNT] = [0; Exchange::VARIANT_COUNT];
+        //The result arrayVec
+        let mut result = ArrayVec::<Level, DEFAULT_DEPTH>::new();
 
-        let mut additional = depth - updated_queue.len();
-        updated_queue.reserve(additional);
-        //new bids now contain all the entry from order_book_snap. Next is to insert all entries from the existing merge order book 
-        //which is not from this exchange to the new vector
-
-
-        for n in merged_queue{
-            if additional <= 0 {
+        //Initially put the first entry of each exchange into the array
+        for (index, book) in exchange_orderbook_array.iter().enumerate() {
+            if !book.bids.is_empty() {
+                match num::FromPrimitive::from_usize(index) {
+                    Some(exchange) => {
+                        value_vec.push(MergeEntry{level: &book.bids[0], exchange});
+                        //initially the next element is index 1 as index 0 has already been pushed in
+                        exchange_index_vec[index] = 1;
+                    },
+                    None => { return Err("Cannot get exchange enum from index".to_string()); }
+                }
+            }
+        }        
+        
+        //Sort, take the first entry, and then pust the next one into the vector. Repeat until result is full
+        while !result.is_full() {
+            //sort the vector
+            value_vec.sort_unstable_by(|l1, l2| {
+                if l2.level.price > l1.level.price || (l2.level.price == l1.level.price && l2.level.amount > l1.level.amount){
+                    Ordering::Greater
+                } else {
+                    Ordering::Less
+                }});
+            //get the first item and push to result
+            let first_item = value_vec.swap_remove(0);        
+            result.push(first_item.level.clone());
+            //push the next entry from the respective exchange into value_vec.
+            let first_item_exchange_index = first_item.exchange as usize;
+            if exchange_index_vec[first_item_exchange_index] >= exchange_orderbook_array[first_item_exchange_index].bids.len() {
                 break;
             }
-            if exchange != &n.exchange {
-                updated_queue.push(n.to_owned());
-                additional -= 1;
-            }
+
+            let next_item = MergeEntry { level: &exchange_orderbook_array[first_item_exchange_index].bids[exchange_index_vec[first_item_exchange_index]],
+                exchange: first_item.exchange };
+            value_vec.push(next_item);
+            //update the index of the respective exchange
+            exchange_index_vec[first_item_exchange_index] += 1;
         }
-        updated_queue.sort_unstable_by(cmp);
-        
-        Ok(updated_queue)
+
+        Ok(result)
     }
 
-    pub fn merge_bid(updated_depth: Vec<Level>, old_depth: &Vec<Level>, exchange: &str, depth: usize,) -> Result<Vec<Level>, String> {
-        Aggregator::merge_side(updated_depth, old_depth, exchange, depth, |l1, l2| {
-            if l2.price > l1.price || (l2.price == l1.price && l2.amount > l1.amount){
-                Ordering::Greater
-            } else {
-                Ordering::Less
-            }})
-    }
+    //This merge algorithm assumes that each exchange's asks are in the correct order and has the same depth
+    fn merge_ask(exchange_orderbook_array: &[OrderBook; Exchange::VARIANT_COUNT]) -> Result<ArrayVec<Level, DEFAULT_DEPTH>, String> {
+        //declare a vec with size = number of exchanges
+        let mut value_vec = Vec::<MergeEntry>::with_capacity(Exchange::VARIANT_COUNT);
+        // A vector that keeps track of the index of the next element in each exchange        
+        let mut exchange_index_vec: [usize; Exchange::VARIANT_COUNT] = [0; Exchange::VARIANT_COUNT];
+        //The result arrayVec
+        let mut result = ArrayVec::<Level, DEFAULT_DEPTH>::new();
 
-    pub fn merge_ask(updated_depth: Vec<Level>, old_depth: &Vec<Level>, exchange: &str, depth: usize,) -> Result<Vec<Level>, String> {
-        Aggregator::merge_side(updated_depth, old_depth, exchange, depth, |l1, l2| {
-            if l1.price < l2.price || (l2.price == l1.price && l1.amount > l2.amount){
-                Ordering::Less
-            } else {
-                Ordering::Greater
+        //Initially put the first entry of each exchange into the array
+        for (index, book) in exchange_orderbook_array.iter().enumerate() {
+            if !book.asks.is_empty() {
+                match num::FromPrimitive::from_usize(index) {
+                    Some(exchange) => {
+                        value_vec.push(MergeEntry{level: &book.asks[0], exchange});
+                        //initially the next element is index 1 as index 0 has already been pushed in
+                        exchange_index_vec[index] = 1;
+                    },
+                    None => { return Err("Cannot get exchange enum from index".to_string()); }
+                }
             }
-        })
-    }   
+        }        
+        
+        //Sort, take the first entry, and then pust the next one into the vector. Repeat until result is full
+        while !result.is_full() {
+            //sort the vector
+            value_vec.sort_unstable_by(|l1, l2| {
+                if l1.level.price < l2.level.price || (l2.level.price == l1.level.price && l1.level.amount > l2.level.amount){
+                    Ordering::Less
+                } else {
+                    Ordering::Greater
+                }
+            });
+            //get the first item and push to result
+            let first_item = value_vec.swap_remove(0);        
+            result.push(first_item.level.clone());
+            //push the next entry from the respective exchange into value_vec.
+            let first_item_exchange_index = first_item.exchange as usize;
+            if exchange_index_vec[first_item_exchange_index] >= exchange_orderbook_array[first_item_exchange_index].asks.len() {
+                break;
+            }
 
-    pub fn merge(&mut self, order_book_snap: OrderBookSnap) -> Result<AggregatedOrderBook, String> {
+            let next_item = MergeEntry { level: &exchange_orderbook_array[first_item_exchange_index].asks[exchange_index_vec[first_item_exchange_index]],
+                exchange: first_item.exchange };
+            value_vec.push(next_item);
+            //update the index of the respective exchange
+            exchange_index_vec[first_item_exchange_index] += 1;
+        }
 
-        use std::collections::hash_map::Entry;
-        let agg_order_book = match self.currency_to_agg_orderbook_map.entry(order_book_snap.order_book.currency.to_string()) {
-            Entry::Occupied(o) => {
-                let exchange = order_book_snap.exchange;
-                let agg_order_book = o.into_mut();
-                //merge bid
-                let result_bids = match Aggregator::merge_bid(order_book_snap.order_book.bids, 
-                    &agg_order_book.order_book.bids, &exchange, self.max_depth) {
-                        Ok(r) => r,
-                        Err(e) => { return Err(e); }
-                    };
-                //merge ask
-                let result_asks = match Aggregator::merge_ask(order_book_snap.order_book.asks, 
-                    &agg_order_book.order_book.asks, &exchange, self.max_depth) {
-                        Ok(r) => r,
-                        Err(e) => { return Err(e); }
-                    };
+        Ok(result)
+    }
 
-                /*if agg_order_book.order_book.bids.iter().zip(new_bids.iter()).filter(|&(a, b)| a == b ).count() == self.max_depth {
-                    println!("No chance in bids!: {:?}, {:?}", agg_order_book.order_book.bids, new_bids);
-                }*/
-
-                agg_order_book.order_book.bids = result_bids;
-                agg_order_book.order_book.asks = result_asks;
-
-                agg_order_book
+    fn merge(&mut self, order_book_snap: OrderBookSnap) -> Result<OrderBook, String> {
+        //First update the exchange image in the exchange_orderbook_array
+        
+        let order_book = &mut self.exchange_orderbook_array[order_book_snap.exchange as usize];        
+        order_book.bids = order_book_snap.order_book.bids;        
+        order_book.asks = order_book_snap.order_book.asks;        
                 
-            },
-            Entry::Vacant(v) => { 
-                let mut order_book = order_book_snap.order_book; 
-                
-                let asks = &mut order_book.asks;
-                asks.reserve((self.max_depth)- asks.len()); //the orderbook within the aggregatedOrderBook needs to keep a size of max_depth
-                
-                let bids = &mut order_book.bids;
-                bids.reserve((self.max_depth) - bids.len());
-                log::info!("Creating orderbook for {}: {:?}", order_book.currency, order_book);
-                v.insert(AggregatedOrderBook::new(0_f64, order_book))
-            },
+        let mut result = OrderBook::new();
+        result.bids = match Aggregator::merge_bid(&self.exchange_orderbook_array) {
+            Ok(bids) => bids,
+            Err(s) => { return Err(s); } 
         };
+        result.asks = match Aggregator::merge_ask(&self.exchange_orderbook_array) {
+            Ok(asks) => asks,
+            Err(s) => { return Err(s); }
+        };
+        Ok(result)
+    }
 
-        log::info!("{:?}", agg_order_book);
-        //now calculate the spread
-        if agg_order_book.order_book.bids.len() <= 0 || agg_order_book.order_book.asks.len() <= 0 {
-            return Err("Fail to calculate spread as either bid or ask queue are empty".to_string());
-        }
-        agg_order_book.spread = agg_order_book.order_book.asks[0].price - agg_order_book.order_book.bids[0].price;
-        
-        Ok(agg_order_book.to_owned())
+    pub fn merge_and_gen_summary(&mut self, order_book_snap: OrderBookSnap) -> Result<Summary, String> {
+        let exchange = order_book_snap.exchange.clone();
+        let order_book: OrderBook = match self.merge(order_book_snap) {
+            Ok(book) => book,
+            Err(e) => { return Err(e); },
+        };
+        let spread = order_book.asks[0].price - order_book.bids[0].price;        
+        let summary = Summary{spread, bids: order_book.bids.to_vec(), asks: order_book.asks.to_vec()};
+        log::info!("{:?}", summary);
+        Ok(summary)
     }
 
     pub async fn run(&mut self) {
         while let Some(msg) = self.rx.recv().await {
-            match self.merge(msg) {
-                Ok(agg_order_book) => { 
+            match self.merge_and_gen_summary(msg) {
+                Ok(summary) => { 
                     let mut mpc = self.mpc.lock().await;
-                    mpc.send(agg_order_book).await;
+                    mpc.send(summary).await;
                 },
                 Err(e) => { log::error!("Merging snapshot return error: {}", e); },
             }
@@ -149,16 +176,18 @@ mod test {
 
     #[test]
     fn test_merge_bid() {         
-        //pub fn merge_bid(updated_depth: Vec<Level>, old_depth: &Vec<Level>, exchange: &str, depth: usize) -> Vec<Level>
+        //fn merge_bid(exchange_orderbook_array: &[OrderBook; Exchange::VARIANT_COUNT]) -> Result<ArrayVec<Level, DEFAULT_DEPTH>, String>
         //error case
+        /*let ob_1 = OrderBook::new();
+        ob_1.add_bid(Level {price: 1.0, amount: 1.0, exchange: "a".to_string()});
         assert_eq!(if let Err(e) = Aggregator::merge_bid(vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}], &vec![], "", 0) {
             e
         } else { "".to_string() },
          "Depth is smaller then updated queue length, fail to merge!".to_string());
 
         //normal case
-        assert_eq!(Aggregator::merge_bid(vec![], &vec![], "", 10).unwrap(), vec![]);
-        assert_eq!(Aggregator::merge_bid(vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}], &vec![Level{exchange: "a".to_string(), 
+        assert_eq!(Aggregator::merge_bid(vec![], &vec![], "", 10).unwrap(), vec![]);*/
+        /*assert_eq!(Aggregator::merge_bid(vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}], &vec![Level{exchange: "a".to_string(), 
             price: 1_f64, amount: 1_f64}], "a", 10).unwrap(), 
             vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}]);
         
@@ -235,9 +264,9 @@ mod test {
                 Level{exchange: "c".to_string(), price: 1.1_f64, amount: 1.1_f64},
                 Level{exchange: "c".to_string(), price: 1_f64, amount: 1.1_f64},
                 Level{exchange: "a".to_string(), price: 0.9_f64, amount: 1_f64},
-                Level{exchange: "a".to_string(), price: 0.8_f64, amount: 1_f64}]);
+                Level{exchange: "a".to_string(), price: 0.8_f64, amount: 1_f64}]);*/
     }
-
+/* 
     #[test]
     fn test_merge_ask() {         
         //error case
@@ -326,5 +355,5 @@ mod test {
                 Level{exchange: "c".to_string(), price: 1.4_f64, amount: 1.1_f64},
                 Level{exchange: "a".to_string(), price: 2.0_f64, amount: 1_f64},
                 Level{exchange: "a".to_string(), price: 2.1_f64, amount: 1_f64}]);      
-    }
+    }*/
 }

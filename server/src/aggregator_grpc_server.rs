@@ -1,4 +1,4 @@
-use crate::{orderbook::{Summary, orderbook_aggregator_server::{OrderbookAggregator}, Empty}, aggregator::AggregatedOrderBook};
+use crate::{orderbook::{Summary, orderbook_aggregator_server::{OrderbookAggregator}, Empty}};
 use tokio::sync::mpsc;
 use tonic::{Request, Response, Status};
 use tokio_stream::wrappers::ReceiverStream;
@@ -9,13 +9,12 @@ use crate::multi_receiver_channels::MultiReceiverChannel;
 const GRPC_BUFFER_SIZE: usize = 1000;
 
 pub struct OrderBookAggregatorService {
-    mpc: Arc<Mutex<MultiReceiverChannel<AggregatedOrderBook>>>,
-    depth: usize,
+    mpc: Arc<Mutex<MultiReceiverChannel<Summary>>>,
 }
 
 impl OrderBookAggregatorService {
-    pub fn new(mpc: Arc<Mutex<MultiReceiverChannel<AggregatedOrderBook>>>, depth: usize) -> OrderBookAggregatorService {
-        OrderBookAggregatorService { mpc, depth }
+    pub fn new(mpc: Arc<Mutex<MultiReceiverChannel<Summary>>>) -> OrderBookAggregatorService {
+        OrderBookAggregatorService { mpc }
     }
 }
 
@@ -30,16 +29,10 @@ impl OrderbookAggregator for OrderBookAggregatorService {
         //todo!() 
         let mut mpc = mpc.lock().await;
         let mut mpc_rx = mpc.create_receiver(GRPC_BUFFER_SIZE);
-        let depth = self.depth;
+        
         tokio::spawn( async move {
-            while let Some(msg) = mpc_rx.recv().await {
-                    let summary = Summary {
-                        spread: msg.spread,
-                        bids: msg.order_book.bids[0..depth].to_vec(),
-                        asks: msg.order_book.asks[0..depth].to_vec(),
-                    };
-                    
-                    match tx.send(Ok(summary)).await {
+            while let Some(msg) = mpc_rx.recv().await {                    
+                    match tx.send(Ok(msg)).await {
                         Ok(_) => {},
                         Err(e) => { 
                             log::error!("Fail to send summary: {:?}", e.to_string()); 

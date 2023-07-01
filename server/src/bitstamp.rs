@@ -1,33 +1,19 @@
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use futures_util::{StreamExt, SinkExt};
 use async_trait::async_trait;
-use crate::market_data_source::{MarketDataSourceInfo, MarketDataSource, OrderBookSnap};
+use crate::market_data_source::*;
 use crate::orderbook::Level;
 use serde_json::{json, Value};
-use serde::Deserialize;
+use serde::{Deserialize};
 use tokio::sync::mpsc::Sender;
-use crate::utility::de_f64_or_string_as_f64;
+
 
 const SUCCESSFULLY_CONNECTED: &str = "bts:subscription_succeeded";
 const CHANNEL_PREFIX: &str = "order_book_";
 
 #[derive(Debug, Deserialize)]
-struct BitstampLevel {
-    #[serde(deserialize_with  = "de_f64_or_string_as_f64")]
-    price: f64,
-    #[serde(deserialize_with  = "de_f64_or_string_as_f64")]
-    amount: f64,
-}
-
-#[derive(Debug, Deserialize)]
-struct BitstampData {
-    bids: Vec<BitstampLevel>,
-    asks: Vec<BitstampLevel>,
-}
-
-#[derive(Debug, Deserialize)]
 struct BitstampJson {
-    data: BitstampData,
+    data: MarketDataSourceData,
     channel: String,
 }
 
@@ -36,12 +22,11 @@ pub struct Bitstamp {
 }
 
 impl Bitstamp {
-    pub fn new(address: &str, currency: &str, depth: usize, sender: Sender<OrderBookSnap>, name: &str) -> impl MarketDataSource {
+    pub fn new(address: &str, currency: &str, sender: Sender<OrderBookSnap>, name: &str) -> impl MarketDataSource {
         println!("Create bitstamp instance for {}", currency.to_string());
         Bitstamp { info: MarketDataSourceInfo {
                 address: address.to_string(), 
                 currency: currency.to_string(), 
-                depth, 
                 sender,
                 name: name.to_string(),
             }
@@ -72,19 +57,22 @@ impl MarketDataSource for Bitstamp {
         };
 
         let currency = json_msg.channel.trim_start_matches(CHANNEL_PREFIX);
-
-        let mut order_book_snap = OrderBookSnap::new(self.info.name.to_string(), self.info.depth, currency);
-
-        for index in 0..self.info.depth {
+        if currency != self.info.currency {
+            return Err("Receive depth for incorrect currency".to_string());
+        }
+        let mut order_book_snap = OrderBookSnap::new(Exchange::Bitstamp);
+        for index in 0..json_msg.data.bids.len() {
             order_book_snap.order_book.add_bid(Level{
                 exchange: self.info.name.to_string(), 
                 price: json_msg.data.bids[index].price, 
                 amount: json_msg.data.bids[index].amount});
+        };
+        for index in 0..json_msg.data.asks.len() {
             order_book_snap.order_book.add_ask(Level{
                 exchange: self.info.name.to_string(), 
                 price: json_msg.data.asks[index].price, 
                 amount: json_msg.data.asks[index].amount});
-        }
+        };
         
         Ok(order_book_snap)
     }
@@ -107,23 +95,21 @@ impl MarketDataSource for Bitstamp {
         };
             
         let (mut write, mut read) = ws_stream.split();
-      
-        let currency_vec: Vec<&str> = self.info.currency.split(',').collect();
-        for cur in currency_vec {
-            let msg = json!({
-                "event": "bts:subscribe",
-                "data": {
-                    "channel": format!("order_book_{}", cur)
-                }
-            });
-
-            log::info!("Bitstamp sub message: {}", msg.to_string());
-            
-            if let Err(e) = write.send(Message::Text(msg.to_string())).await {
-                log::error!("Failed to subscribe for {}: {:?}", self.info.name, e);
-                return;
+              
+        let msg = json!({
+            "event": "bts:subscribe",
+            "data": {
+                "channel": format!("order_book_{}", self.info.currency)
             }
+        });
+
+        log::info!("Bitstamp sub message: {}", msg.to_string());
+        
+        if let Err(e) = write.send(Message::Text(msg.to_string())).await {
+            log::error!("Failed to subscribe for {}: {:?}", self.info.name, e);
+            return;
         }
+        
         let mut got_first_message = false;
         while let Some(msg) = read.next().await {
             let message = match msg {
