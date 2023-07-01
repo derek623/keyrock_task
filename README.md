@@ -69,6 +69,7 @@ POSSIBLE IMPROVEMENTS
 
 - The server only support one currency. I thought of allowing it to support multiple currency. However, if we connect to more exchange, then supporting multiple currencies could be an issue as the load of the server maybe too much. Another solution is to deploy an instance per currency. However, we can't tell for sure which is a better choice until we can do actual measurement. Therefore, I go with the one currency solution.
 - Add more test cases and also integration tests
+- Add reconnection/retry logic for each source
 
 
 

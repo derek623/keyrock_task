@@ -9,6 +9,7 @@ use crate::DEFAULT_DEPTH;
 use arrayvec::ArrayVec;
 use min_max_heap::MinMaxHeap;
 
+//The struct that will be added to the min-max-heap when merging the bids
 #[derive(Debug, PartialEq)]
 struct BidMergeEntry<'a> {
     level: &'a MarketDatSourceLevel,
@@ -46,6 +47,7 @@ impl Ord for BidMergeEntry<'_> {
         }
 }
 
+//The struct that will be added to the min-max-heap when merging the asks
 #[derive(Debug, PartialEq)]
 struct AskMergeEntry<'a> {
     level: &'a MarketDatSourceLevel,

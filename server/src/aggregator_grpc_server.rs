@@ -1,8 +1,7 @@
 use crate::{orderbook::{Summary, orderbook_aggregator_server::{OrderbookAggregator}, Empty}};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 use tonic::{Request, Response, Status};
 use tokio_stream::wrappers::ReceiverStream;
-use tokio::sync::Mutex;
 use std::sync::Arc;
 use crate::multi_receiver_channels::MultiReceiverChannel;
 
