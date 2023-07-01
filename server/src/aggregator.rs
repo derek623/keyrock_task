@@ -1,5 +1,5 @@
 use tokio::sync::mpsc::Receiver;
-use crate::{market_data_source::*, orderbook};
+use crate::market_data_source::*;
 use crate::orderbook::Summary;
 use crate::{orderbook::Level, multi_receiver_channels::MultiReceiverChannel};
 use std::cmp::Ordering;
@@ -24,7 +24,7 @@ impl Aggregator {
     }
 
     //This merge algorithm assumes that each exchange's bids are in the correct order and has the same depth
-    fn merge_bid(exchange_orderbook_array: &[OrderBook; Exchange::VARIANT_COUNT]) -> Result<ArrayVec<Level, DEFAULT_DEPTH>, String> {
+    fn merge_bid(exchange_orderbook_array: &[OrderBook]) -> Result<ArrayVec<Level, DEFAULT_DEPTH>, String> {
         //declare a vec with size = number of exchanges
         let mut value_vec = Vec::<MergeEntry>::with_capacity(Exchange::VARIANT_COUNT);
         // A vector that keeps track of the index of the next element in each exchange        
@@ -46,6 +46,10 @@ impl Aggregator {
             }
         }        
         
+        if value_vec.is_empty() {
+            return Ok(result);
+        }
+
         //Sort, take the first entry, and then pust the next one into the vector. Repeat until result is full
         while !result.is_full() {
             //sort the vector
@@ -57,7 +61,7 @@ impl Aggregator {
                 }});
             //get the first item and push to result
             let first_item = value_vec.swap_remove(0);        
-            result.push(Level {price: first_item.level.price, amount: first_item.level.amount, exchange: first_item.exchange.to_string()});
+            result.push(first_item.level.to_orderbook_level(first_item.exchange.to_string()));
             //push the next entry from the respective exchange into value_vec.
             let first_item_exchange_index = first_item.exchange as usize;
             if exchange_index_vec[first_item_exchange_index] >= exchange_orderbook_array[first_item_exchange_index].bids.len() {
@@ -75,7 +79,7 @@ impl Aggregator {
     }
 
     //This merge algorithm assumes that each exchange's asks are in the correct order and has the same depth
-    fn merge_ask(exchange_orderbook_array: &[OrderBook; Exchange::VARIANT_COUNT]) -> Result<ArrayVec<Level, DEFAULT_DEPTH>, String> {
+    fn merge_ask(exchange_orderbook_array: &[OrderBook]) -> Result<ArrayVec<Level, DEFAULT_DEPTH>, String> {
         //declare a vec with size = number of exchanges
         let mut value_vec = Vec::<MergeEntry>::with_capacity(Exchange::VARIANT_COUNT);
         // A vector that keeps track of the index of the next element in each exchange        
@@ -97,6 +101,10 @@ impl Aggregator {
             }
         }        
         
+        if value_vec.is_empty() {
+            return Ok(result);
+        }
+
         //Sort, take the first entry, and then pust the next one into the vector. Repeat until result is full
         while !result.is_full() {
             //sort the vector
@@ -109,7 +117,7 @@ impl Aggregator {
             });
             //get the first item and push to result
             let first_item = value_vec.swap_remove(0);        
-            result.push(Level {price: first_item.level.price, amount: first_item.level.amount, exchange: first_item.exchange.to_string()});
+            result.push(first_item.level.to_orderbook_level(first_item.exchange.to_string()));
             //push the next entry from the respective exchange into value_vec.
             let first_item_exchange_index = first_item.exchange as usize;
             if exchange_index_vec[first_item_exchange_index] >= exchange_orderbook_array[first_item_exchange_index].asks.len() {
@@ -173,186 +181,109 @@ impl Aggregator {
 mod test {
     use super::*;
 
+    const INVALID_SIZE: usize = Exchange::VARIANT_COUNT + 1;
+
     #[test]
-    fn test_merge_bid() {         
-        //fn merge_bid(exchange_orderbook_array: &[OrderBook; Exchange::VARIANT_COUNT]) -> Result<ArrayVec<Level, DEFAULT_DEPTH>, String>
-        //error case
-        /*let ob_1 = OrderBook::new();
-        ob_1.add_bid(Level {price: 1.0, amount: 1.0, exchange: "a".to_string()});
-        assert_eq!(if let Err(e) = Aggregator::merge_bid(vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}], &vec![], "", 0) {
-            e
-        } else { "".to_string() },
-         "Depth is smaller then updated queue length, fail to merge!".to_string());
-
-        //normal case
-        assert_eq!(Aggregator::merge_bid(vec![], &vec![], "", 10).unwrap(), vec![]);*/
-        /*assert_eq!(Aggregator::merge_bid(vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}], &vec![Level{exchange: "a".to_string(), 
-            price: 1_f64, amount: 1_f64}], "a", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}]);
-        
-        //only 1 exchange is involved
-        assert_eq!(Aggregator::merge_bid(
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}],
-            &vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}], "a", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}]);
-        assert_eq!(Aggregator::merge_bid(
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 2_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}],
-            &vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}], "a", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 2_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}]);
-        assert_eq!(Aggregator::merge_bid(
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 2_f64, amount: 1_f64}],
-            &vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 2_f64, amount: 1_f64}], "a", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 2_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}]);
-        assert_eq!(Aggregator::merge_bid(
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 2_f64, amount: 1_f64}],
-            &vec![Level{exchange: "a".to_string(), price: 3_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 5_f64, amount: 1_f64}], "a", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 2_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}]);
-        assert_eq!(Aggregator::merge_bid(
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}],
-            &vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}], "", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}]);
-
-        //multiple exchanges are involved
-        assert_eq!(Aggregator::merge_bid(
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1.2}],
-            &vec![Level{exchange: "b".to_string(), price: 1_f64, amount: 1_f64}], "a", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1.2}, Level{exchange: "b".to_string(), price: 1_f64, amount: 1_f64}]);
-        assert_eq!(Aggregator::merge_bid(
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1.2}],
-            &vec![Level{exchange: "b".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "c".to_string(), price: 1_f64, amount: 1.1_f64}], "a", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1.2}, Level{exchange: "c".to_string(), price: 1_f64, amount: 1.1_f64}, 
-            Level{exchange: "b".to_string(), price: 1_f64, amount: 1_f64}]);
-        assert_eq!(Aggregator::merge_bid(
-            vec![Level{exchange: "a".to_string(), price: 1.7_f64, amount: 1.2}, Level{exchange: "a".to_string(), price: 1.6_f64, amount: 1.2}],
-            &vec![Level{exchange: "a".to_string(), price: 1.5_f64, amount: 1.2},
-                Level{exchange: "a".to_string(), price: 1.4_f64, amount: 1.2},
-                Level{exchange: "b".to_string(), price: 1.3_f64, amount: 1_f64}, 
-                Level{exchange: "b".to_string(), price: 1.2_f64, amount: 1_f64}, 
-                Level{exchange: "c".to_string(), price: 1.1_f64, amount: 1.1_f64},
-                Level{exchange: "c".to_string(), price: 1_f64, amount: 1.1_f64}], "a", 6).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1.7_f64, amount: 1.2},
-                Level{exchange: "a".to_string(), price: 1.6_f64, amount: 1.2},
-                Level{exchange: "b".to_string(), price: 1.3_f64, amount: 1_f64}, 
-                Level{exchange: "b".to_string(), price: 1.2_f64, amount: 1_f64}, 
-                Level{exchange: "c".to_string(), price: 1.1_f64, amount: 1.1_f64},
-                Level{exchange: "c".to_string(), price: 1_f64, amount: 1.1_f64}]);
-        assert_eq!(Aggregator::merge_bid(
-            vec![Level{exchange: "a".to_string(), price: 0.9_f64, amount: 1.2}, Level{exchange: "a".to_string(), price: 0.8_f64, amount: 1.2}],
-            &vec![Level{exchange: "a".to_string(), price: 1.5_f64, amount: 1.2},
-                Level{exchange: "a".to_string(), price: 1.4_f64, amount: 1.2},
-                Level{exchange: "b".to_string(), price: 1.3_f64, amount: 1_f64}, 
-                Level{exchange: "b".to_string(), price: 1.2_f64, amount: 1_f64}, 
-                Level{exchange: "c".to_string(), price: 1.1_f64, amount: 1.1_f64},
-                Level{exchange: "c".to_string(), price: 1_f64, amount: 1.1_f64}], "a", 6).unwrap(), 
-            vec![Level{exchange: "b".to_string(), price: 1.3_f64, amount: 1_f64}, 
-                Level{exchange: "b".to_string(), price: 1.2_f64, amount: 1_f64}, 
-                Level{exchange: "c".to_string(), price: 1.1_f64, amount: 1.1_f64},
-                Level{exchange: "c".to_string(), price: 1_f64, amount: 1.1_f64},
-                Level{exchange: "a".to_string(), price: 0.9_f64, amount: 1.2},
-                Level{exchange: "a".to_string(), price: 0.8_f64, amount: 1.2}]);
-        assert_eq!(Aggregator::merge_bid(
-            vec![Level{exchange: "a".to_string(), price: 0.9_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 0.8_f64, amount: 1_f64}],
-            &vec![Level{exchange: "a".to_string(), price: 1.5_f64, amount: 1_f64},
-                Level{exchange: "b".to_string(), price: 1.4_f64, amount: 1_f64},
-                Level{exchange: "b".to_string(), price: 1.3_f64, amount: 1_f64}, 
-                Level{exchange: "a".to_string(), price: 1.2_f64, amount: 1_f64}, 
-                Level{exchange: "c".to_string(), price: 1.1_f64, amount: 1.1_f64},
-                Level{exchange: "c".to_string(), price: 1_f64, amount: 1.1_f64}], "a", 6).unwrap(), 
-            vec![Level{exchange: "b".to_string(), price: 1.4_f64, amount: 1_f64}, 
-                Level{exchange: "b".to_string(), price: 1.3_f64, amount: 1_f64}, 
-                Level{exchange: "c".to_string(), price: 1.1_f64, amount: 1.1_f64},
-                Level{exchange: "c".to_string(), price: 1_f64, amount: 1.1_f64},
-                Level{exchange: "a".to_string(), price: 0.9_f64, amount: 1_f64},
-                Level{exchange: "a".to_string(), price: 0.8_f64, amount: 1_f64}]);*/
+    fn test_merge_bid_invalid_exchange_size_1() {         
+        //Number of exchange is more than defined in the exchange enum, but empty orderbook for each exchange        
+        let exchange_orderbook_array: [OrderBook; INVALID_SIZE] = std::array::from_fn(|_|             
+            OrderBook::new()
+        );        
+        assert_eq!(Aggregator::merge_bid(&exchange_orderbook_array).expect("Error").len(), 0);
     }
-/* 
     #[test]
-    fn test_merge_ask() {         
-        //error case
-        assert_eq!(if let Err(e) = Aggregator::merge_ask(vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}], &vec![], "", 0) {
+    fn test_merge_bid_invalid_exchange_size_2() {         
+        //Number of exchange is more than defined in the exchange enum, add one level to each exchange
+        let mut exchange_orderbook_array: [OrderBook; INVALID_SIZE] = std::array::from_fn(|_|             
+            OrderBook::new()
+        );
+        for n in &mut exchange_orderbook_array {
+            n.bids.push(MarketDatSourceLevel {amount: 1.0, price: 1.0});
+        }
+        assert_eq!(if let Err(e) = Aggregator::merge_bid(&exchange_orderbook_array) {
             e
         } else { "".to_string() },
-         "Depth is smaller then updated queue length, fail to merge!".to_string());
+         "Cannot get exchange enum from index".to_string());
+    }
+    #[test]
+    fn test_merge_bid_one_order_book() {
+        //Only one exchange has order book, others are empty
+        let mut exchange_orderbook_array: [OrderBook; Exchange::VARIANT_COUNT] = std::array::from_fn(|_|             
+            OrderBook::new()
+        );
+        let index = Exchange::Binance as usize;
+        //exchange_orderbook_array[index].bids.push(MarketDatSourceLevel {amount: 1.0, price: 1.0});
+        let mut expected_result = ArrayVec::<Level, DEFAULT_DEPTH>::new();
 
-        //normal case
-        assert_eq!(Aggregator::merge_ask(vec![], &vec![], "", 10).unwrap(), vec![]);
-        assert_eq!(Aggregator::merge_ask(vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}], &vec![Level{exchange: "a".to_string(), 
-            price: 1_f64, amount: 1_f64}], "a", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}]);
+        let mut best_price = 10.0;
+        let step = 0.1;
+        while !expected_result.is_full() {
+            exchange_orderbook_array[index].bids.push(MarketDatSourceLevel {amount: 1.0, price: best_price});
+            expected_result.push(Level{amount: 1.0, price: best_price, exchange: Exchange::Binance.to_string()});
+            assert_eq!(Aggregator::merge_bid(&exchange_orderbook_array).expect("Error"), expected_result);
+            best_price -= step;
+        }
+    }
 
-        //only 1 exchange is involved
-        assert_eq!(Aggregator::merge_ask(
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}],
-            &vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}], "a", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}]);
-        assert_eq!(Aggregator::merge_ask(
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 2_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}],
-            &vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}], "a", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 2_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}]);
-        assert_eq!(Aggregator::merge_ask(
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 2_f64, amount: 1_f64}],
-            &vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 2_f64, amount: 1_f64}], "a", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 2_f64, amount: 1_f64}]);
-        assert_eq!(Aggregator::merge_ask(
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 2_f64, amount: 1_f64}],
-            &vec![Level{exchange: "a".to_string(), price: 3_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 5_f64, amount: 1_f64}], "a", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 2_f64, amount: 1_f64}]);
-        assert_eq!(Aggregator::merge_ask(
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}],
-            &vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}], "", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 1_f64, amount: 1_f64}]);
+    #[test]
+    fn test_merge_bid_multiple_order_book_1() {
+        //Same price but different amount, the entry with the higher amount will go first
+        let mut exchange_orderbook_array: [OrderBook; Exchange::VARIANT_COUNT] = std::array::from_fn(|_|             
+            OrderBook::new()
+        );
+        let binance_index = Exchange::Binance as usize;
+        let bitstamp_index = Exchange::Bitstamp as usize;
+        //exchange_orderbook_array[index].bids.push(MarketDatSourceLevel {amount: 1.0, price: 1.0});
+        let mut expected_result = ArrayVec::<Level, DEFAULT_DEPTH>::new();
 
-        //multiple exchanges are involved
-        assert_eq!(Aggregator::merge_ask(
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1.2}],
-            &vec![Level{exchange: "b".to_string(), price: 1_f64, amount: 1_f64}], "a", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1.2}, Level{exchange: "b".to_string(), price: 1_f64, amount: 1_f64}]);
-        assert_eq!(Aggregator::merge_ask(
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1.2}],
-            &vec![Level{exchange: "b".to_string(), price: 1_f64, amount: 1_f64}, Level{exchange: "c".to_string(), price: 1_f64, amount: 1.1_f64}], "a", 10).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1_f64, amount: 1.2}, Level{exchange: "c".to_string(), price: 1_f64, amount: 1.1_f64}, 
-            Level{exchange: "b".to_string(), price: 1_f64, amount: 1_f64}]);
-        assert_eq!(Aggregator::merge_ask(
-            vec![Level{exchange: "a".to_string(), price: 1.1_f64, amount: 1.2}, Level{exchange: "a".to_string(), price: 1.2_f64, amount: 1.2}],
-            &vec![Level{exchange: "a".to_string(), price: 1.3_f64, amount: 1.2},
-                Level{exchange: "a".to_string(), price: 1.4_f64, amount: 1.2},
-                Level{exchange: "b".to_string(), price: 1.5_f64, amount: 1_f64}, 
-                Level{exchange: "b".to_string(), price: 1.6_f64, amount: 1_f64}, 
-                Level{exchange: "c".to_string(), price: 1.7_f64, amount: 1.1_f64},
-                Level{exchange: "c".to_string(), price: 1.8_f64, amount: 1.1_f64}], "a", 6).unwrap(), 
-            vec![Level{exchange: "a".to_string(), price: 1.1_f64, amount: 1.2},
-                Level{exchange: "a".to_string(), price: 1.2_f64, amount: 1.2},
-                Level{exchange: "b".to_string(), price: 1.5_f64, amount: 1_f64}, 
-                Level{exchange: "b".to_string(), price: 1.6_f64, amount: 1_f64}, 
-                Level{exchange: "c".to_string(), price: 1.7_f64, amount: 1.1_f64},
-                Level{exchange: "c".to_string(), price: 1.8_f64, amount: 1.1_f64}]);
-        assert_eq!(Aggregator::merge_ask(
-            vec![Level{exchange: "a".to_string(), price: 2.0_f64, amount: 1.2}, Level{exchange: "a".to_string(), price: 2.1_f64, amount: 1.2}],
-            &vec![Level{exchange: "a".to_string(), price: 0.9_f64, amount: 1.2},
-                Level{exchange: "a".to_string(), price: 1.0_f64, amount: 1.2},
-                Level{exchange: "b".to_string(), price: 1.1_f64, amount: 1_f64}, 
-                Level{exchange: "b".to_string(), price: 1.2_f64, amount: 1_f64}, 
-                Level{exchange: "c".to_string(), price: 1.3_f64, amount: 1.1_f64},
-                Level{exchange: "c".to_string(), price: 1.5_f64, amount: 1.1_f64}], "a", 6).unwrap(), 
-            vec![Level{exchange: "b".to_string(), price: 1.1_f64, amount: 1_f64}, 
-                Level{exchange: "b".to_string(), price: 1.2_f64, amount: 1_f64}, 
-                Level{exchange: "c".to_string(), price: 1.3_f64, amount: 1.1_f64},
-                Level{exchange: "c".to_string(), price: 1.5_f64, amount: 1.1_f64},
-                Level{exchange: "a".to_string(), price: 2.0_f64, amount: 1.2},
-                Level{exchange: "a".to_string(), price: 2.1_f64, amount: 1.2}]);
-        assert_eq!(Aggregator::merge_ask(
-            vec![Level{exchange: "a".to_string(), price: 2.0_f64, amount: 1_f64}, Level{exchange: "a".to_string(), price: 2.1_f64, amount: 1_f64}],
-            &vec![Level{exchange: "a".to_string(), price: 0.9_f64, amount: 1_f64},
-                Level{exchange: "b".to_string(), price: 1.0_f64, amount: 1_f64},
-                Level{exchange: "b".to_string(), price: 1.1_f64, amount: 1_f64}, 
-                Level{exchange: "a".to_string(), price: 1.2_f64, amount: 1_f64}, 
-                Level{exchange: "c".to_string(), price: 1.3_f64, amount: 1.1_f64},
-                Level{exchange: "c".to_string(), price: 1.4_f64, amount: 1.1_f64}], "a", 6).unwrap(), 
-            vec![Level{exchange: "b".to_string(), price: 1.0_f64, amount: 1_f64}, 
-                Level{exchange: "b".to_string(), price: 1.1_f64, amount: 1_f64}, 
-                Level{exchange: "c".to_string(), price: 1.3_f64, amount: 1.1_f64},
-                Level{exchange: "c".to_string(), price: 1.4_f64, amount: 1.1_f64},
-                Level{exchange: "a".to_string(), price: 2.0_f64, amount: 1_f64},
-                Level{exchange: "a".to_string(), price: 2.1_f64, amount: 1_f64}]);      
-    }*/
+        let mut binance_best_price = 10.0;
+        let mut bitstamp_best_price = 10.0;
+        let step = 0.1;
+        for _ in 0..DEFAULT_DEPTH {
+            exchange_orderbook_array[binance_index].bids.push(MarketDatSourceLevel {amount: 2.0, price: binance_best_price});
+            exchange_orderbook_array[bitstamp_index].bids.push(MarketDatSourceLevel {amount: 1.0, price: bitstamp_best_price});            
+            binance_best_price -= step;
+            bitstamp_best_price -= step;
+        }
+
+        let mut index = 0;
+        while !expected_result.is_full() {
+            expected_result.push(exchange_orderbook_array[binance_index].bids[index].to_orderbook_level(Exchange::Binance.to_string()));
+            expected_result.push(exchange_orderbook_array[bitstamp_index].bids[index].to_orderbook_level(Exchange::Bitstamp.to_string()));
+            index += 1;
+        }
+        
+        assert_eq!(Aggregator::merge_bid(&exchange_orderbook_array).expect("Error"), expected_result);            
+    }
+
+    #[test]
+    fn test_merge_bid_multiple_order_book_2() {
+        //All with different price, higher price go first
+        let mut exchange_orderbook_array: [OrderBook; Exchange::VARIANT_COUNT] = std::array::from_fn(|_|             
+            OrderBook::new()
+        );
+        let binance_index = Exchange::Binance as usize;
+        let bitstamp_index = Exchange::Bitstamp as usize;
+        //exchange_orderbook_array[index].bids.push(MarketDatSourceLevel {amount: 1.0, price: 1.0});
+        let mut expected_result = ArrayVec::<Level, DEFAULT_DEPTH>::new();
+
+        let mut binance_best_price = 21.0;
+        let mut bitstamp_best_price = 20.0;
+        let step = 2.0;
+        for _ in 0..DEFAULT_DEPTH {
+            exchange_orderbook_array[binance_index].bids.push(MarketDatSourceLevel {amount: 1.0, price: binance_best_price});
+            exchange_orderbook_array[bitstamp_index].bids.push(MarketDatSourceLevel {amount: 1.0, price: bitstamp_best_price});            
+            binance_best_price -= step;
+            bitstamp_best_price -= step;
+        }
+
+        let mut index = 0;
+        while !expected_result.is_full() {
+            expected_result.push(exchange_orderbook_array[binance_index].bids[index].to_orderbook_level(Exchange::Binance.to_string()));
+            expected_result.push(exchange_orderbook_array[bitstamp_index].bids[index].to_orderbook_level(Exchange::Bitstamp.to_string()));
+            index += 1;
+        }
+        
+        assert_eq!(Aggregator::merge_bid(&exchange_orderbook_array).expect("Error"), expected_result);            
+    }    
 }

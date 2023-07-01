@@ -1,12 +1,14 @@
 use async_trait::async_trait;
 use tokio::sync::mpsc::Sender;
-use crate::orderbook::Level;
 use serde_json::{Value};
 use serde::{de, Deserialize, Deserializer, de::SeqAccess, de::IgnoredAny};
 use std::fmt;
 use arrayvec::ArrayVec;
 use variant_count::VariantCount;
-use num_derive::FromPrimitive;    
+use num_derive::FromPrimitive;
+use orderbook::Level;
+
+use crate::orderbook;    
 
 pub const DEFAULT_DEPTH: usize = 10;
 
@@ -36,16 +38,6 @@ impl OrderBook {
     pub fn new() -> OrderBook{
         OrderBook {bids: ArrayVec::<MarketDatSourceLevel, DEFAULT_DEPTH>::new(), asks: ArrayVec::<MarketDatSourceLevel, DEFAULT_DEPTH>::new()}
     }
-
-    pub fn add_bid(&mut self, level: MarketDatSourceLevel)
-    {
-        self.bids.push(level);
-    }
-    pub fn add_ask(&mut self, level: MarketDatSourceLevel)
-    {
-        self.asks.push(level);
-    }
-
 }
 
 #[derive(Debug, Deserialize, Copy, Clone)]
@@ -54,6 +46,12 @@ pub struct MarketDatSourceLevel {
     pub price: f64,
     #[serde(deserialize_with  = "de_f64_or_string_as_f64")]
     pub amount: f64,
+}
+
+impl MarketDatSourceLevel {
+    pub fn to_orderbook_level(&self, exchange: String) -> Level {
+        Level{ amount: self.amount, price: self.price, exchange }
+    }
 }
 
 #[derive(Debug, Deserialize)]
