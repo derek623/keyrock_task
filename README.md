@@ -11,6 +11,7 @@ To run the server, run the below command in the root folder
 **cargo run --release --bin server \<currency\> \<port\>**
 
 currency - optional, default value is ethbtc.
+
 port - optional, the default value is 30253 if not specified
 
 Example:
