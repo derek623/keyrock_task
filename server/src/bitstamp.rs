@@ -130,7 +130,13 @@ impl MarketDataSource for Bitstamp {
                         }
                     }
                 }
-                Message::Ping(_) | Message::Pong(_) | Message::Frame(_)=> {}
+                Message::Ping(m) => { 
+                    match write.send(Message::Pong(m)).await {
+                        Ok(_) => {}
+                        Err(e) => { println!("Cannot send pong for {}: {}", self.info.name, e); } 
+                    };
+                }
+                Message::Pong(_) | Message::Frame(_)=> {}
                 Message::Binary(_) => (),
                 Message::Close(e) => {
                     log::error!("Disconnected {:?}", e);

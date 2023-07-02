@@ -1,24 +1,9 @@
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use futures_util::StreamExt;
+use futures_util::{StreamExt, SinkExt};
 use crate::market_data_source::*;
 use async_trait::async_trait;
 use serde::{Deserialize};
 use tokio::sync::mpsc::Sender;
-
-/*
-#[derive(Debug, Deserialize)]
-struct BinanceLevel {
-    #[serde(deserialize_with  = "de_f64_or_string_as_f64")]
-    price: f64,
-    #[serde(deserialize_with  = "de_f64_or_string_as_f64")]
-    amount: f64,
-}
-
-#[derive(Debug, Deserialize)]
-struct BinanceData {
-    bids: Vec<BinanceLevel>,
-    asks: Vec<BinanceLevel>,
-}*/
 
 #[derive(Debug, Deserialize)]
 struct BinanceJson {
@@ -82,7 +67,7 @@ impl MarketDataSource for Binance {
             }
         };
     
-        let (_, mut read) = ws_stream.split();        
+        let (mut write, mut read) = ws_stream.split();        
       
         while let Some(msg) = read.next().await {
              let message = match msg {
@@ -103,7 +88,13 @@ impl MarketDataSource for Binance {
                     }
                 },
                 
-                Message::Ping(_) | Message::Pong(_) | Message::Frame(_)=> {},
+                Message::Ping(m) => {                 
+                    match write.send(Message::Pong(m)).await {
+                        Ok(_) => {}
+                        Err(e) => { println!("Cannot send pong for {}: {}", self.info.name, e); } 
+                    };
+                }
+                Message::Pong(_) | Message::Frame(_)=> {}
                 Message::Binary(_) => (),
                 Message::Close(e) => {
                     log::error!("Disconnected {:?}", e);
