@@ -82,7 +82,7 @@ impl MarketDataSource for Binance {
             }
         };
     
-        let (mut write, mut read) = ws_stream.split();        
+        let (_, mut read) = ws_stream.split();        
       
         while let Some(msg) = read.next().await {
              let message = match msg {
