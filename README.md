@@ -61,7 +61,7 @@ A struct that is developed to enable multiple grpc clients. It stores a list of 
 log file
 ------------------------------
 
-Log file is being written to \<basedir\>/target/logs. It rotates every 50 MB and the latest one is called temp.log
+Log file is being written to \<basedir\>/target/logs. It rotates every 50 MB and the latest one is called server.log
 
 ------------------------------
 POSSIBLE IMPROVEMENTS

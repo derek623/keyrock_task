@@ -38,7 +38,7 @@ const GRPC_SERVER_DEFAULT_PORT: usize = 30253;
 pub async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     fast_log::init(Config::new().level(LevelFilter::Info).chan_len(Some(100000)).file_split(
-        "target/logs/",
+        "target/logs/server.log",
         LogSize::MB(50),
         RollingType::All,
         LogPacker {},
