@@ -1,11 +1,10 @@
-use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use futures_util::{StreamExt, SinkExt};
-use async_trait::async_trait;
 use crate::market_data_source::*;
+use async_trait::async_trait;
+use futures_util::{SinkExt, StreamExt};
+use serde::Deserialize;
 use serde_json::{json, Value};
-use serde::{Deserialize};
 use tokio::sync::mpsc::Sender;
-
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 const SUCCESSFULLY_CONNECTED: &str = "bts:subscription_succeeded";
 const CHANNEL_PREFIX: &str = "order_book_";
@@ -16,29 +15,35 @@ struct BitstampJson {
     channel: String,
 }
 
+#[derive(Clone)]
 pub struct Bitstamp {
     info: MarketDataSourceInfo,
 }
 
 impl Bitstamp {
-    pub fn new(address: &str, currency: &str, sender: Sender<OrderBookSnap>, name: &str) -> impl MarketDataSource {
+    pub fn new(
+        address: &'static str,
+        currency: &str,
+        sender: Sender<OrderBookSnap>,
+        name: &'static str,
+    ) -> Self {
         println!("Create bitstamp instance for {}", currency.to_string());
-        Bitstamp { info: MarketDataSourceInfo {
-                address: address.to_string(), 
-                currency: currency.to_string(), 
+        Bitstamp {
+            info: MarketDataSourceInfo {
+                address,
+                currency: currency.to_string(),
                 sender,
-                name: name.to_string(),
-            }
+                name,
+            },
         }
     }
 
     pub fn is_successful(&self, msg: &str) -> bool {
-        
         let json_msg: Value = match serde_json::from_str(&msg) {
             Ok(msg) => msg,
-            Err(e) => { 
+            Err(e) => {
                 log::error!("Invalid response: {:?} ,{msg}", e);
-                return false; 
+                return false;
             }
         };
 
@@ -49,10 +54,11 @@ impl Bitstamp {
 #[async_trait]
 impl MarketDataSource for Bitstamp {
     fn normalize(&self, msg: &str) -> Result<OrderBookSnap, String> {
-
         let json_msg: BitstampJson = match serde_json::from_str(msg) {
             Ok(msg) => msg,
-            Err(e) => { return Err(e.to_string()); }
+            Err(e) => {
+                return Err(e.to_string());
+            }
         };
 
         let currency = json_msg.channel.trim_start_matches(CHANNEL_PREFIX);
@@ -62,10 +68,10 @@ impl MarketDataSource for Bitstamp {
         let mut order_book_snap = OrderBookSnap::new(Exchange::Bitstamp);
         order_book_snap.order_book.bids = json_msg.data.bids;
         order_book_snap.order_book.asks = json_msg.data.asks;
-        
+
         Ok(order_book_snap)
     }
-    
+
     async fn run(&self) {
         let url = match url::Url::parse(&self.info.address) {
             Ok(u) => u,
@@ -74,17 +80,17 @@ impl MarketDataSource for Bitstamp {
                 return;
             }
         };
-        
-        let (ws_stream, _response) = match connect_async(url).await{
-            Ok((s,r)) => (s, r),
+
+        let (ws_stream, _response) = match connect_async(url).await {
+            Ok((s, r)) => (s, r),
             Err(e) => {
-                log::error!("Failed to connect to {}: {:?}", self.info.name, e);    
+                log::error!("Failed to connect to {}: {:?}", self.info.name, e);
                 return;
             }
         };
-            
+
         let (mut write, mut read) = ws_stream.split();
-              
+
         let msg = json!({
             "event": "bts:subscribe",
             "data": {
@@ -93,12 +99,12 @@ impl MarketDataSource for Bitstamp {
         });
 
         log::info!("Bitstamp sub message: {}", msg.to_string());
-        
+
         if let Err(e) = write.send(Message::Text(msg.to_string())).await {
             log::error!("Failed to subscribe for {}: {:?}", self.info.name, e);
             return;
         }
-        
+
         let mut got_first_message = false;
         while let Some(msg) = read.next().await {
             let message = match msg {
@@ -118,25 +124,33 @@ impl MarketDataSource for Bitstamp {
                             log::error!("Fail to subscribe to {}", self.info.name);
                             return;
                         }
-                    }
-                    else {
+                    } else {
                         //let data = msg.unwrap().into_text().unwrap();
                         match self.normalize(&msg) {
-                            Ok(orderbook) => { 
+                            Ok(orderbook) => {
                                 if let Err(msg) = self.info.sender.send(orderbook).await {
                                     log::error!("Failed to send orderbook snap: {msg}");
-                                }; },
-                            Err(e) => { log::error!("Failed to normalize msg for {}: {:?}", self.info.name, e); },
+                                };
+                            }
+                            Err(e) => {
+                                log::error!(
+                                    "Failed to normalize msg for {}: {:?}",
+                                    self.info.name,
+                                    e
+                                );
+                            }
                         }
                     }
                 }
-                Message::Ping(m) => { 
+                Message::Ping(m) => {
                     match write.send(Message::Pong(m)).await {
                         Ok(_) => {}
-                        Err(e) => { println!("Cannot send pong for {}: {}", self.info.name, e); } 
+                        Err(e) => {
+                            println!("Cannot send pong for {}: {}", self.info.name, e);
+                        }
                     };
                 }
-                Message::Pong(_) | Message::Frame(_)=> {}
+                Message::Pong(_) | Message::Frame(_) => {}
                 Message::Binary(_) => (),
                 Message::Close(e) => {
                     log::error!("Disconnected {:?}", e);
@@ -145,5 +159,4 @@ impl MarketDataSource for Bitstamp {
             }
         }
     }
-
 }

@@ -134,7 +134,7 @@ impl Aggregator {
             //push the next entry from the respective exchange into value_vec.
             let first_item_exchange_index = first_item.exchange as usize;
             if exchange_index_vec[first_item_exchange_index] >= exchange_orderbook_array[first_item_exchange_index].bids.len() {
-                break;
+                continue;                
             }
 
             let next_item = BidMergeEntry { level: &exchange_orderbook_array[first_item_exchange_index].bids[exchange_index_vec[first_item_exchange_index]],
@@ -186,7 +186,7 @@ impl Aggregator {
             //push the next entry from the respective exchange into value_vec.
             let first_item_exchange_index = first_item.exchange as usize;
             if exchange_index_vec[first_item_exchange_index] >= exchange_orderbook_array[first_item_exchange_index].asks.len() {
-                break;
+                continue;
             }
 
             let next_item = AskMergeEntry { level: &exchange_orderbook_array[first_item_exchange_index].asks[exchange_index_vec[first_item_exchange_index]],
